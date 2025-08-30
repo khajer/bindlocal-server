@@ -1,10 +1,10 @@
+mod http_server;
 mod request;
 mod response;
 mod router;
-mod server;
 mod tcp_server;
 
-use server::HttpServer;
+use http_server::HttpServer;
 use std::env;
 use tcp_server::TcpServer;
 
