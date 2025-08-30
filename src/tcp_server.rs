@@ -1,15 +1,23 @@
+use crate::shared::SharedState;
 use std::str;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 pub struct TcpServer {
     listener: TcpListener,
+    shared_state: SharedState,
 }
 
 impl TcpServer {
-    pub async fn new(addr: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(
+        addr: &str,
+        shared_state: SharedState,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let listener = TcpListener::bind(addr).await?;
-        Ok(TcpServer { listener })
+        Ok(TcpServer {
+            listener,
+            shared_state,
+        })
     }
 
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {

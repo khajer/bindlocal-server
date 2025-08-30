@@ -2,9 +2,11 @@ mod http_server;
 mod request;
 mod response;
 mod router;
+mod shared;
 mod tcp_server;
 
 use http_server::HttpServer;
+use shared::SharedState;
 use std::env;
 use tcp_server::TcpServer;
 
@@ -31,9 +33,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("HTTP Server will run on http://{}", http_addr);
     println!("TCP Server will run on tcp://{}", tcp_addr);
 
+    let (share_state, _receiver, _ubounded_receiver) = SharedState::new();
     // Start both servers concurrently
-    let http_server = HttpServer::new(&http_addr).await?;
-    let tcp_server = TcpServer::new(&tcp_addr).await?;
+    let http_server = HttpServer::new(&http_addr, share_state.clone()).await?;
+    let tcp_server = TcpServer::new(&tcp_addr, share_state.clone()).await?;
 
     // Run both servers simultaneously
     tokio::try_join!(http_server.run(), tcp_server.run())?;
