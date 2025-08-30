@@ -46,6 +46,7 @@ impl SharedState {
     }
 
     pub async fn add_message(&self, message: Message) {
+        println!("add_message: {:?}", message);
         let mut messages = self.messages.lock().await;
         messages.push(message.clone());
 
@@ -64,6 +65,7 @@ impl SharedState {
 
     pub async fn send_to_tcp_client(&self, client_id: &str, message: &str) -> bool {
         let connections = self.tcp_connections.lock().await;
+
         if let Some(tx) = connections.get(client_id) {
             tx.send(message.to_string()).is_ok()
         } else {

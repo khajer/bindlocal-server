@@ -2,6 +2,8 @@ use crate::shared::SharedState;
 use std::str;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::select;
+use tokio::sync::mpsc;
 
 pub struct TcpServer {
     listener: TcpListener,
@@ -27,9 +29,15 @@ impl TcpServer {
             let (socket, addr) = self.listener.accept().await?;
             println!("New TCP connection from: {}", addr);
 
+            let shared_state = self.shared_state.clone();
+            //let client_id = format!("tcp_client_{}", Uuid::new_v4());
+            let client_id = "0001";
+
             // Spawn a new task for each TCP connection
             tokio::spawn(async move {
-                if let Err(e) = Self::handle_tcp_connection(socket).await {
+                if let Err(e) =
+                    Self::handle_tcp_connection(socket, shared_state, client_id.to_string()).await
+                {
                     eprintln!("Error handling TCP connection: {}", e);
                 }
             });
@@ -38,7 +46,15 @@ impl TcpServer {
 
     async fn handle_tcp_connection(
         mut stream: TcpStream,
+        shared_state: SharedState,
+        client_id: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+        // register to share state
+        shared_state
+            .register_tcp_client("0001".to_string(), tx)
+            .await;
+
         // Send welcome message
         let welcome = "Welcome to Raw TCP Server!\nCommands: echo <msg>, time, status, quit\n> ";
         stream.write_all(welcome.as_bytes()).await?;
@@ -46,27 +62,80 @@ impl TcpServer {
         let mut buffer = [0; 1024];
 
         loop {
-            let bytes_read = stream.read(&mut buffer).await?;
+            select! {
+                // Handle incoming TCP commands from this client
+                result = stream.read(&mut buffer) => {
+                    match result {
+                        Ok(0) => {
+                            println!("TCP client {} disconnected", client_id);
+                            break;
+                        },
+                        Ok(bytes_read) => {
+                            let message = str::from_utf8(&buffer[..bytes_read])?.trim();
+                            println!("TCP received from {}: {}", client_id, message);
 
-            if bytes_read == 0 {
-                println!("TCP client disconnected");
-                break;
+                            // let response = Self::process_tcp_command(message, &shared_state).await;
+                            let response = Self::process_tcp_command(message).await;
+
+                            if response == "QUIT" {
+                                let goodbye = "Goodbye!\n";
+                                stream.write_all(goodbye.as_bytes()).await?;
+                                break;
+                            }
+
+                            let full_response = format!("{}\n> ", response);
+                            stream.write_all(full_response.as_bytes()).await?;
+                            stream.flush().await?;
+                        },
+                        Err(e) => {
+                            eprintln!("Error reading from TCP stream: {}", e);
+                            break;
+                        }
+                    }
+                },
+
+                // Handle direct messages sent to this specific client
+                msg = rx.recv() => {
+                    match msg {
+                        Some(message) => {
+                            let notification = format!("\n[DIRECT MESSAGE] {}\n> ", message);
+                            if let Err(e) = stream.write_all(notification.as_bytes()).await {
+                                eprintln!("Error sending direct message to TCP client {}: {}", client_id, e);
+                                break;
+                            }
+                            if let Err(e) = stream.flush().await {
+                                eprintln!("Error flushing TCP stream: {}", e);
+                                break;
+                            }
+                        },
+                        None => {
+                            println!("TCP client {} channel closed", client_id);
+                            break;
+                        }
+                    }
+                },
+
+                // Handle broadcast messages from HTTP
+                // msg = message_receiver.recv() => {
+                //     match msg {
+                //         Ok(message) => {
+                //             let notification = format!("\n[BROADCAST] {}: {}\n> ", message.from, message.content);
+                //             if let Err(e) = stream.write_all(notification.as_bytes()).await {
+                //                 eprintln!("Error sending broadcast to TCP client {}: {}", client_id, e);
+                //                 break;
+                //             }
+                //             if let Err(e) = stream.flush().await {
+                //                 eprintln!("Error flushing TCP stream: {}", e);
+                //                 break;
+                //             }
+                //         },
+                //         Err(e) => {
+                //             eprintln!("Error receiving broadcast message: {}", e);
+                //             // Continue on broadcast errors
+                //         }
+                //     }
+                // }
             }
-
-            let message = str::from_utf8(&buffer[..bytes_read])?.trim();
-            println!("TCP received: {}", message);
-
-            let response = Self::process_tcp_command(message).await;
-
-            if response == "QUIT" {
-                let goodbye = "Goodbye!\n";
-                stream.write_all(goodbye.as_bytes()).await?;
-                break;
-            }
-
-            let full_response = format!("{}\n> ", response);
-            stream.write_all(full_response.as_bytes()).await?;
-            stream.flush().await?;
         }
 
         Ok(())
