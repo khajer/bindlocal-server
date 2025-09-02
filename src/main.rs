@@ -1,7 +1,6 @@
 mod http_server;
 mod request;
 mod response;
-mod router;
 mod shared;
 mod tcp_server;
 
@@ -12,7 +11,6 @@ use tcp_server::TcpServer;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Get ports from command line arguments or use defaults
     let args: Vec<String> = env::args().collect();
     let http_port = if args.len() > 1 {
         args[1].parse::<u16>().unwrap_or(8080)
@@ -34,6 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("TCP Server will run on tcp://{}", tcp_addr);
 
     let (share_state, _receiver, _ubounded_receiver) = SharedState::new();
+
     // Start both servers concurrently
     let http_server = HttpServer::new(&http_addr, share_state.clone()).await?;
     let tcp_server = TcpServer::new(&tcp_addr, share_state.clone()).await?;

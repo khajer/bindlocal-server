@@ -24,14 +24,17 @@ impl TcpServer {
 
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         println!("TCP Server listening for raw TCP connections...");
-
+        let mut client_cnt = 1;
         loop {
             let (socket, addr) = self.listener.accept().await?;
             println!("New TCP connection from: {}", addr);
 
             let shared_state = self.shared_state.clone();
-            //let client_id = format!("tcp_client_{}", Uuid::new_v4());
-            let client_id = "0001";
+
+            let client_id = format!("{:04}", client_cnt);
+            client_cnt += 1;
+
+            println!("client id [{}]", client_id);
 
             // Spawn a new task for each TCP connection
             tokio::spawn(async move {

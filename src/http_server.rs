@@ -3,7 +3,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 use crate::request::HttpRequest;
-use crate::router::route_request;
+use crate::response::HttpResponse;
 use crate::shared::{Message, SharedState};
 
 pub struct HttpServer {
@@ -70,10 +70,10 @@ impl HttpServer {
             println!("send message error");
         }
 
-        let http_request = HttpRequest::parse(request_str)?;
+        // let http_request = HttpRequest::parse(request_str)?;
 
-        let response = route_request(&http_request).await;
-
+        // let response = route_request(&http_request).await;
+        let response = HttpResponse::ok_text("Hello").to_string();
         stream.write_all(response.as_bytes()).await?;
         stream.flush().await?;
 
