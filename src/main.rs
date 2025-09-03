@@ -1,5 +1,4 @@
 mod http_server;
-mod request;
 mod response;
 mod shared;
 mod tcp_server;
@@ -31,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("HTTP Server will run on http://{}", http_addr);
     println!("TCP Server will run on tcp://{}", tcp_addr);
 
-    let (share_state, _receiver, _ubounded_receiver) = SharedState::new();
+    let share_state = SharedState::new();
 
     // Start both servers concurrently
     let http_server = HttpServer::new(&http_addr, share_state.clone()).await?;

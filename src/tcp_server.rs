@@ -65,37 +65,6 @@ impl TcpServer {
 
         loop {
             select! {
-                // Handle incoming TCP commands from this client
-                // result = stream.read(&mut buffer) => {
-                //     match result {
-                //         Ok(0) => {
-                //             println!("TCP client {} disconnected", client_id);
-                //             break;
-                //         },
-                //         Ok(bytes_read) => {
-                //             let message = str::from_utf8(&buffer[..bytes_read])?.trim();
-                //             println!("TCP received from {}: {}", client_id, message);
-
-                //             // let response = Self::process_tcp_command(message, &shared_state).await;
-                //             let response = Self::process_tcp_command(message).await;
-
-                //             if response == "QUIT" {
-                //                 let goodbye = "Goodbye!\n";
-                //                 stream.write_all(goodbye.as_bytes()).await?;
-                //                 break;
-                //             }
-
-                //             let full_response = format!("{}\n> ", response);
-                //             stream.write_all(full_response.as_bytes()).await?;
-                //             stream.flush().await?;
-                //         },
-                //         Err(e) => {
-                //             eprintln!("Error reading from TCP stream: {}", e);
-                //             break;
-                //         }
-                //     }
-                // },
-
                 // Handle direct messages sent to this specific client
                 msg = rx_tcp.recv() => {
                     match msg {
@@ -116,8 +85,6 @@ impl TcpServer {
 
                             shared_state.send_to_http_client("0001", rec_msg).await;
 
-
-
                         },
                         None => {
                             println!("TCP client {} channel closed", client_id);
@@ -125,66 +92,8 @@ impl TcpServer {
                         }
                     }
                 },
-
-                // Handle broadcast messages from HTTP
-                // msg = message_receiver.recv() => {
-                //     match msg {
-                //         Ok(message) => {
-                //             let notification = format!("\n[BROADCAST] {}: {}\n> ", message.from, message.content);
-                //             if let Err(e) = stream.write_all(notification.as_bytes()).await {
-                //                 eprintln!("Error sending broadcast to TCP client {}: {}", client_id, e);
-                //                 break;
-                //             }
-                //             if let Err(e) = stream.flush().await {
-                //                 eprintln!("Error flushing TCP stream: {}", e);
-                //                 break;
-                //             }
-                //         },
-                //         Err(e) => {
-                //             eprintln!("Error receiving broadcast message: {}", e);
-                //             // Continue on broadcast errors
-                //         }
-                //     }
-                // }
             }
         }
-
         Ok(())
     }
-
-    // async fn process_tcp_command(command: &str) -> String {
-    //     let parts: Vec<&str> = command.split_whitespace().collect();
-
-    //     if parts.is_empty() {
-    //         return "Invalid command. Try: echo <message>, time, status, or quit".to_string();
-    //     }
-
-    //     match parts[0].to_lowercase().as_str() {
-    //         "echo" => {
-    //             if parts.len() > 1 {
-    //                 format!("Echo: {}", parts[1..].join(" "))
-    //             } else {
-    //                 "Echo: (no message provided)".to_string()
-    //             }
-    //         },
-    //         "time" => {
-    //             use std::time::{SystemTime, UNIX_EPOCH};
-    //             let timestamp = SystemTime::now()
-    //                 .duration_since(UNIX_EPOCH)
-    //                 .unwrap()
-    //                 .as_secs();
-    //             format!("Current timestamp: {}", timestamp)
-    //         },
-    //         "status" => {
-    //             "TCP Server Status: Running | Type 'quit' to disconnect".to_string()
-    //         },
-    //         "quit" | "exit" => "QUIT".to_string(),
-    //         "help" => {
-    //             "Available commands:\n  echo <message> - Echo back your message\n  time - Get current timestamp\n  status - Server status\n  quit - Disconnect".to_string()
-    //         },
-    //         _ => {
-    //             format!("Unknown command: '{}'. Try: echo, time, status, help, or quit", parts[0])
-    //         }
-    //     }
-    // }
 }
