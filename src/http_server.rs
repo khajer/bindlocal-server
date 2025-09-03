@@ -2,9 +2,10 @@ use std::str;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-use crate::request::HttpRequest;
 use crate::response::HttpResponse;
 use crate::shared::{Message, SharedState};
+
+use tokio::sync::mpsc;
 
 pub struct HttpServer {
     listener: TcpListener,
@@ -44,9 +45,16 @@ impl HttpServer {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut buffer = [0; 1024];
         let bytes_read = stream.read(&mut buffer).await?;
-
         let request_str = str::from_utf8(&buffer[..bytes_read])?;
         println!("Received request:\n{}", request_str);
+
+        // waiting for
+        let (tx_http, mut rx_http) = mpsc::unbounded_channel::<String>();
+
+        let client_id = "0001";
+        shared_state
+            .register_http_client(client_id.to_string(), tx_http)
+            .await;
 
         // let milliseconds_timestamp: u128 = std::time::SystemTime::now()
         //     .duration_since(std::time::UNIX_EPOCH)
@@ -60,20 +68,26 @@ impl HttpServer {
         //     timestamp: milliseconds_timestamp as u64,
         // };
 
-        println!("test send message");
-        if shared_state
-            .send_to_tcp_client("0001", "test message")
-            .await
-        {
-            println!("send message commpletely");
-        } else {
-            println!("send message error");
+        if !shared_state.send_to_tcp_client("0001", "PING").await {
+            println!("sending fails");
         }
 
+        let rec = rx_http.recv().await.unwrap();
+        println!("receive , {}", rec);
+
+        // let receive = rx_http.recv();
+        // match receive {
+        //     Some(message) => {
+        //         println!("test");
+        //     }
+        //     _ => {
+        //         println!("error");
+        //     }
+        // }
         // let http_request = HttpRequest::parse(request_str)?;
 
         // let response = route_request(&http_request).await;
-        let response = HttpResponse::ok_text("Hello").to_string();
+        let response = HttpResponse::ok_text(rec.as_str()).to_string();
         stream.write_all(response.as_bytes()).await?;
         stream.flush().await?;
 

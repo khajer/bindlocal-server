@@ -24,6 +24,9 @@ pub struct SharedState {
 
     // Active TCP connections
     pub tcp_connections: Arc<Mutex<HashMap<String, mpsc::UnboundedSender<String>>>>,
+
+    // Active HTTP conections
+    pub http_connections: Arc<Mutex<HashMap<String, mpsc::UnboundedSender<String>>>>,
 }
 
 impl SharedState {
@@ -40,34 +43,45 @@ impl SharedState {
             http_to_tcp_tx,
             messages: Arc::new(Mutex::new(Vec::new())),
             tcp_connections: Arc::new(Mutex::new(HashMap::new())),
+            http_connections: Arc::new(Mutex::new(HashMap::new())),
         };
 
         (state, broadcast_rx, http_to_tcp_rx)
     }
 
-    pub async fn add_message(&self, message: Message) {
-        println!("add_message: {:?}", message);
-        let mut messages = self.messages.lock().await;
-        messages.push(message.clone());
+    // pub async fn add_message(&self, message: Message) {
+    //     println!("add_message: {:?}", message);
+    //     let mut messages = self.messages.lock().await;
+    //     messages.push(message.clone());
 
-        // Keep only last 100 messages
-        if messages.len() > 100 {
-            messages.remove(0);
-        }
+    //     // Keep only last 100 messages
+    //     if messages.len() > 100 {
+    //         messages.remove(0);
+    //     }
 
-        // Broadcast to all subscribers
-        let _ = self.broadcast_tx.send(message);
-    }
+    //     // Broadcast to all subscribers
+    //     let _ = self.broadcast_tx.send(message);
+    // }
 
-    pub async fn get_messages(&self) -> Vec<Message> {
-        self.messages.lock().await.clone()
-    }
+    // pub async fn get_messages(&self) -> Vec<Message> {
+    //     self.messages.lock().await.clone()
+    // }
 
     pub async fn send_to_tcp_client(&self, client_id: &str, message: &str) -> bool {
         let connections = self.tcp_connections.lock().await;
 
-        if let Some(tx) = connections.get(client_id) {
-            tx.send(message.to_string()).is_ok()
+        if let Some(tx_tcp) = connections.get(client_id) {
+            tx_tcp.send(message.to_string()).is_ok()
+        } else {
+            false
+        }
+    }
+
+    pub async fn send_to_http_client(&self, client_id: &str, message: &str) -> bool {
+        let connections = self.http_connections.lock().await;
+
+        if let Some(tx_http) = connections.get(client_id) {
+            tx_http.send(message.to_string()).is_ok()
         } else {
             false
         }
@@ -78,8 +92,13 @@ impl SharedState {
         connections.insert(client_id, tx);
     }
 
-    pub async fn unregister_tcp_client(&self, client_id: &str) {
-        let mut connections = self.tcp_connections.lock().await;
-        connections.remove(client_id);
+    pub async fn register_http_client(&self, client_id: String, tx: mpsc::UnboundedSender<String>) {
+        let mut connections = self.http_connections.lock().await;
+        connections.insert(client_id, tx);
     }
+
+    // pub async fn unregister_tcp_client(&self, client_id: &str) {
+    //     let mut connections = self.tcp_connections.lock().await;
+    //     connections.remove(client_id);
+    // }
 }
