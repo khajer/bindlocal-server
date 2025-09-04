@@ -28,7 +28,7 @@ impl HttpServer {
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             let (socket, addr) = self.listener.accept().await?;
-            println!("New connection from: {}", addr);
+            println!("New HTTP connection from: {}", addr);
 
             // Spawn a new task for each connection
             let shared_state = self.shared_state.clone();
@@ -72,7 +72,13 @@ impl HttpServer {
         let rec = rx_http.recv().await;
         match rec {
             Some(value) => {
-                let response = HttpResponse::ok_text(value.as_str()).to_string();
+                if value == "" {
+                    shared_state.unregister_tcp_client(client_id.as_str()).await;
+                    let response = HttpResponse::not_found().to_string();
+                    stream.write_all(response.as_bytes()).await?;
+                }
+                // let response = HttpResponse::ok_text(value.as_str()).to_string();
+                let response = value;
                 stream.write_all(response.as_bytes()).await?;
             }
             None => {

@@ -40,14 +40,14 @@ impl SharedState {
         let mut connections = self.tcp_connections.lock().await;
         connections.insert(client_id, tx);
     }
+    pub async fn unregister_tcp_client(&self, client_id: &str) {
+        let mut connections = self.tcp_connections.lock().await;
+        connections.remove(client_id);
+    }
 
     pub async fn register_http_client(&self, client_id: String, tx: mpsc::UnboundedSender<String>) {
         let mut connections = self.http_connections.lock().await;
+
         connections.insert(client_id, tx);
     }
-
-    // pub async fn unregister_tcp_client(&self, client_id: &str) {
-    //     let mut connections = self.tcp_connections.lock().await;
-    //     connections.remove(client_id);
-    // }
 }

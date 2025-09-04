@@ -23,7 +23,6 @@ impl TcpServer {
     }
 
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
-        println!("TCP Server listening for raw TCP connections...");
         let mut client_cnt = 1;
         loop {
             let (socket, addr) = self.listener.accept().await?;
@@ -59,7 +58,7 @@ impl TcpServer {
 
         // Send welcome message
         let welcome = format!(
-            "connected the server\nhost: http://{}.localhost:8080",
+            "Connected the Server\nhost: http://{}.localhost:8080",
             client_id
         );
         stream.write_all(welcome.as_bytes()).await?;
@@ -72,25 +71,29 @@ impl TcpServer {
                 msg = rx_tcp.recv() => {
                     match msg {
                         Some(message) => {
-
                             if let Err(e) = stream.write_all(message.as_bytes()).await {
                                 eprintln!("Error sending direct message to TCP client {}: {}", client_id, e);
+                                shared_state.send_to_http_client(client_id.as_str(), "").await;
+
                                 break;
                             }
                             if let Err(e) = stream.flush().await {
                                 eprintln!("Error flushing TCP stream: {}", e);
-                                break;
+
+                                shared_state.send_to_http_client(client_id.as_str(), "").await;
                             }
 
                             let result = stream.read(&mut buffer).await?;
                             let rec_msg = str::from_utf8(&buffer[..result])?.trim();
                             println!("TCP received from {}: {}", client_id, rec_msg);
 
-                            shared_state.send_to_http_client("0001", rec_msg).await;
+                            shared_state.send_to_http_client(client_id.as_str(), rec_msg).await;
 
                         },
                         None => {
                             println!("TCP client {} channel closed", client_id);
+                            shared_state
+                                .unregister_tcp_client(client_id.as_str()).await;
                             break;
                         }
                     }
