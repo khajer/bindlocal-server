@@ -63,7 +63,7 @@ impl HttpServer {
             .await;
 
         if !shared_state
-            .send_to_tcp_client(client_id.as_str(), "PING")
+            .send_to_tcp_client(client_id.as_str(), request_str)
             .await
         {
             println!("sending fails");

@@ -19,7 +19,6 @@ impl SharedState {
 
     pub async fn send_to_tcp_client(&self, client_id: &str, message: &str) -> bool {
         let connections = self.tcp_connections.lock().await;
-
         if let Some(tx_tcp) = connections.get(client_id) {
             tx_tcp.send(message.to_string()).is_ok()
         } else {

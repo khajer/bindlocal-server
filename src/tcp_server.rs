@@ -58,7 +58,10 @@ impl TcpServer {
             .await;
 
         // Send welcome message
-        let welcome = "Welcome to Raw TCP Server!\nCommands: echo <msg>, time, status, quit\n> ";
+        let welcome = format!(
+            "connected the server\nhost: http://{}.localhost:8080",
+            client_id
+        );
         stream.write_all(welcome.as_bytes()).await?;
 
         let mut buffer = [0; 1024];
