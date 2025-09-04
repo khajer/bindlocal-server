@@ -15,17 +15,17 @@ impl HttpResponse {
         }
     }
 
-    pub fn ok_html(body: &str) -> Self {
-        Self::new(200, "OK", "text/html", body)
-    }
+    // pub fn ok_html(body: &str) -> Self {
+    //     Self::new(200, "OK", "text/html", body)
+    // }
 
     pub fn ok_text(body: &str) -> Self {
         Self::new(200, "OK", "text/plain", body)
     }
 
-    pub fn ok_json(body: &str) -> Self {
-        Self::new(200, "OK", "application/json", body)
-    }
+    // pub fn ok_json(body: &str) -> Self {
+    //     Self::new(200, "OK", "application/json", body)
+    // }
 
     pub fn not_found() -> Self {
         let body = r#"<!DOCTYPE html>

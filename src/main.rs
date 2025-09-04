@@ -1,4 +1,5 @@
 mod http_server;
+mod request;
 mod response;
 mod shared;
 mod tcp_server;
