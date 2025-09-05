@@ -63,7 +63,7 @@ impl TcpServer {
         );
         stream.write_all(welcome.as_bytes()).await?;
 
-        let mut buffer = [0; 1024];
+        let mut buffer = [0; 4096];
 
         loop {
             select! {
