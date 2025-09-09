@@ -71,23 +71,55 @@ impl TcpServer {
                 msg = rx_tcp.recv() => {
                     match msg {
                         Some(message) => {
-                            if let Err(e) = stream.write_all(message.as_bytes()).await {
+                            if let Err(e) = stream.write(message.as_bytes()).await {
                                 eprintln!("Error sending direct message to TCP client {}: {}", client_id, e);
                                 shared_state.send_to_http_client(client_id.as_str(), "").await;
-
                                 break;
                             }
                             if let Err(e) = stream.flush().await {
                                 eprintln!("Error flushing TCP stream: {}", e);
-
                                 shared_state.send_to_http_client(client_id.as_str(), "").await;
+                                break;
                             }
 
-                            let result = stream.read(&mut buffer).await?;
-                            let rec_msg = str::from_utf8(&buffer[..result])?.trim();
-                            println!("TCP received from {}: {}", client_id, rec_msg);
 
-                            shared_state.send_to_http_client(client_id.as_str(), rec_msg).await;
+                            // wait and receive message.
+
+                            let mut buf = vec![0u8; 4096]; // Initial capacity
+                            let mut total_data = Vec::new();
+                            loop {
+                                println!("start");
+                                let n = stream.read(&mut buf).await?;
+                                println!("read");
+                                if n == 0 {
+                                    break; // EOF
+                                }
+                                println!("loop");
+                                total_data.extend_from_slice(&buf[..n]);
+                                println!("extend");
+
+                                if total_data.windows(4).any(|w| w == b"\r\n\r\n") {
+                                           println!("Complete HTTP headers received");
+                                           break;
+                                }
+                            }
+                            println!("TCP received from {}: {:?}", client_id, total_data);
+
+                            shared_state.send_to_http_client(client_id.as_str(), "byte_slice").await;
+
+                            // let result = stream.read(&mut buffer).await?;
+                            // let rec_msg = str::from_utf8(&buffer[..result])?.trim();
+                            // println!("TCP received from {}: {}", client_id, rec_msg);
+                            // shared_state.send_to_http_client(client_id.as_str(), rec_msg).await;
+
+
+                            // let mut full_buffer = Vec::new();
+                            // println!("**** before read");
+                            // let result = stream(&mut full_buffer).await?;
+                            // println!("**** Read completed");
+                            // let rec_msg = str::from_utf8(&full_buffer[..result])?.trim();
+                            // println!("**** Read completed\n {:?}", rec_msg);
+                            // shared_state.send_to_http_client(client_id.as_str(), rec_msg).await;
 
                         },
                         None => {
