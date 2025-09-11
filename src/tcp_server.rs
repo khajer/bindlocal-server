@@ -63,7 +63,7 @@ impl TcpServer {
         );
         stream.write_all(welcome.as_bytes()).await?;
 
-        let mut buffer = [0; 4096];
+        // let mut buffer = [0; 4096];
 
         loop {
             select! {
@@ -73,18 +73,16 @@ impl TcpServer {
                         Some(message) => {
                             if let Err(e) = stream.write(message.as_bytes()).await {
                                 eprintln!("Error sending direct message to TCP client {}: {}", client_id, e);
-                                shared_state.send_to_http_client(client_id.as_str(), "").await;
+                                shared_state.send_to_http_client(client_id.as_str(), vec![]).await;
                                 break;
                             }
                             if let Err(e) = stream.flush().await {
                                 eprintln!("Error flushing TCP stream: {}", e);
-                                shared_state.send_to_http_client(client_id.as_str(), "").await;
+                                shared_state.send_to_http_client(client_id.as_str(), vec![]).await;
                                 break;
                             }
 
-
                             // wait and receive message.
-
                             let mut buf = vec![0u8; 4096]; // Initial capacity
                             let mut total_data = Vec::new();
                             loop {
@@ -103,23 +101,8 @@ impl TcpServer {
                                            break;
                                 }
                             }
-                            println!("TCP received from {}: {:?}", client_id, total_data);
-
-                            shared_state.send_to_http_client(client_id.as_str(), "byte_slice").await;
-
-                            // let result = stream.read(&mut buffer).await?;
-                            // let rec_msg = str::from_utf8(&buffer[..result])?.trim();
-                            // println!("TCP received from {}: {}", client_id, rec_msg);
-                            // shared_state.send_to_http_client(client_id.as_str(), rec_msg).await;
-
-
-                            // let mut full_buffer = Vec::new();
-                            // println!("**** before read");
-                            // let result = stream(&mut full_buffer).await?;
-                            // println!("**** Read completed");
-                            // let rec_msg = str::from_utf8(&full_buffer[..result])?.trim();
-                            // println!("**** Read completed\n {:?}", rec_msg);
-                            // shared_state.send_to_http_client(client_id.as_str(), rec_msg).await;
+                            println!("Response received, length: {} bytes", total_data.len());
+                            shared_state.send_to_http_client(client_id.as_str(), total_data).await;
 
                         },
                         None => {

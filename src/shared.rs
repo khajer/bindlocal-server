@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 #[derive(Clone)]
 pub struct SharedState {
     pub tcp_connections: Arc<Mutex<HashMap<String, mpsc::UnboundedSender<String>>>>,
-    pub http_connections: Arc<Mutex<HashMap<String, mpsc::UnboundedSender<String>>>>,
+    pub http_connections: Arc<Mutex<HashMap<String, mpsc::UnboundedSender<Vec<u8>>>>>,
 }
 
 impl SharedState {
@@ -26,11 +26,11 @@ impl SharedState {
         }
     }
 
-    pub async fn send_to_http_client(&self, client_id: &str, message: &str) -> bool {
+    pub async fn send_to_http_client(&self, client_id: &str, message: Vec<u8>) -> bool {
         let connections = self.http_connections.lock().await;
 
         if let Some(tx_http) = connections.get(client_id) {
-            tx_http.send(message.to_string()).is_ok()
+            tx_http.send(message).is_ok()
         } else {
             false
         }
@@ -45,7 +45,11 @@ impl SharedState {
         connections.remove(client_id);
     }
 
-    pub async fn register_http_client(&self, client_id: String, tx: mpsc::UnboundedSender<String>) {
+    pub async fn register_http_client(
+        &self,
+        client_id: String,
+        tx: mpsc::UnboundedSender<Vec<u8>>,
+    ) {
         let mut connections = self.http_connections.lock().await;
 
         connections.insert(client_id, tx);

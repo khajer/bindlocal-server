@@ -56,7 +56,7 @@ impl HttpServer {
         }
 
         // waiting for
-        let (tx_http, mut rx_http) = mpsc::unbounded_channel::<String>();
+        let (tx_http, mut rx_http) = mpsc::unbounded_channel::<Vec<u8>>();
 
         shared_state
             .register_http_client(client_id.to_string(), tx_http)
@@ -67,19 +67,18 @@ impl HttpServer {
             .await
         {
             println!("sending fails");
+            return Err("sending fails".into());
         }
 
         let rec = rx_http.recv().await;
         match rec {
             Some(value) => {
-                if value == "" {
+                if value.is_empty() {
                     shared_state.unregister_tcp_client(client_id.as_str()).await;
                     let response = HttpResponse::not_found().to_string();
                     stream.write_all(response.as_bytes()).await?;
                 }
-                // let response = HttpResponse::ok_text(value.as_str()).to_string();
-                let response = value;
-                stream.write_all(response.as_bytes()).await?;
+                stream.write_all(&value).await?;
             }
             None => {
                 let response = HttpResponse::not_found().to_string();
