@@ -67,6 +67,7 @@ impl HttpServer {
             .await
         {
             println!("sending fails");
+            return Err("sending fails".into());
         }
 
         let rec = rx_http.recv().await;
@@ -77,8 +78,6 @@ impl HttpServer {
                     let response = HttpResponse::not_found().to_string();
                     stream.write_all(response.as_bytes()).await?;
                 }
-                // let response = HttpResponse::ok_text(value.as_str()).to_string();
-                // let response = value;
                 stream.write_all(&value).await?;
             }
             None => {
