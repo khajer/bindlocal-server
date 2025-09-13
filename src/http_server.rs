@@ -44,9 +44,25 @@ impl HttpServer {
         mut stream: TcpStream,
         shared_state: SharedState,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut buffer = [0; 1024];
-        let bytes_read = stream.read(&mut buffer).await?;
-        let request_str = str::from_utf8(&buffer[..bytes_read])?;
+        // wait and receive message.
+        let mut buf = vec![0u8; 1024]; // Initial capacity
+        let mut total_data = Vec::new();
+        loop {
+            let n = stream.read(&mut buf).await?;
+            if n == 0 {
+                break; // EOF
+            }
+            total_data.extend_from_slice(&buf[..n]);
+
+            if total_data.windows(4).any(|w| w == b"\r\n\r\n") {
+                println!("Complete HTTP headers received");
+                break;
+            }
+        }
+
+        let response_data: Vec<u8> = total_data.to_vec();
+
+        let request_str = str::from_utf8(&response_data)?;
 
         let client_id = HttpRequest::get_subdomain(request_str);
         if client_id == "" {
@@ -63,7 +79,7 @@ impl HttpServer {
             .await;
 
         if !shared_state
-            .send_to_tcp_client(client_id.as_str(), request_str)
+            .send_to_tcp_client(client_id.as_str(), response_data)
             .await
         {
             println!("sending fails");
