@@ -1,4 +1,5 @@
 use crate::shared::SharedState;
+use std::io::Read;
 use std::str;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -50,7 +51,7 @@ impl TcpServer {
         shared_state: SharedState,
         client_id: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (tx_tcp, mut rx_tcp) = mpsc::unbounded_channel::<String>();
+        let (tx_tcp, mut rx_tcp) = mpsc::unbounded_channel::<Vec<u8>>();
 
         shared_state
             .register_tcp_client(client_id.to_string(), tx_tcp)
@@ -71,7 +72,7 @@ impl TcpServer {
                 msg = rx_tcp.recv() => {
                     match msg {
                         Some(message) => {
-                            if let Err(e) = stream.write(message.as_bytes()).await {
+                            if let Err(e) = stream.write_all(&message).await {
                                 eprintln!("Error sending direct message to TCP client {}: {}", client_id, e);
                                 shared_state.send_to_http_client(client_id.as_str(), vec![]).await;
                                 break;
@@ -86,15 +87,13 @@ impl TcpServer {
                             let mut buf = vec![0u8; 4096]; // Initial capacity
                             let mut total_data = Vec::new();
                             loop {
-                                println!("start");
+
                                 let n = stream.read(&mut buf).await?;
-                                println!("read");
+
                                 if n == 0 {
                                     break; // EOF
                                 }
-                                println!("loop");
                                 total_data.extend_from_slice(&buf[..n]);
-                                println!("extend");
 
                                 if total_data.windows(4).any(|w| w == b"\r\n\r\n") {
                                            println!("Complete HTTP headers received");
