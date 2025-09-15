@@ -68,6 +68,7 @@ impl HttpServer {
         if client_id == "" {
             let response = HttpResponse::not_found().to_string();
             stream.write_all(response.as_bytes()).await?;
+            stream.flush().await?;
             return Ok(());
         }
 
@@ -93,8 +94,9 @@ impl HttpServer {
                     shared_state.unregister_tcp_client(client_id.as_str()).await;
                     let response = HttpResponse::not_found().to_string();
                     stream.write_all(response.as_bytes()).await?;
+                } else {
+                    stream.write_all(&value).await?;
                 }
-                stream.write_all(&value).await?;
             }
             None => {
                 let response = HttpResponse::not_found().to_string();
@@ -102,6 +104,7 @@ impl HttpServer {
             }
         }
         stream.flush().await?;
+        stream.shutdown().await?;
         Ok(())
     }
 }
