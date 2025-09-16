@@ -83,7 +83,6 @@ impl HttpServer {
             .send_to_tcp_client(client_id.as_str(), response_data)
             .await
         {
-            println!("sending fails");
             return Err("sending fails".into());
         }
 
