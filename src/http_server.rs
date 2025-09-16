@@ -104,7 +104,6 @@ impl HttpServer {
             }
         }
         stream.flush().await?;
-        stream.shutdown().await?;
         Ok(())
     }
 }
