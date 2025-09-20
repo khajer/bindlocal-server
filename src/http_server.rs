@@ -2,6 +2,8 @@ use std::str;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
+use chrono::{Datelike, Local, Timelike};
+
 use crate::request::HttpRequest;
 use crate::response::HttpResponse;
 use crate::shared::SharedState;
@@ -55,13 +57,12 @@ impl HttpServer {
             total_data.extend_from_slice(&buf[..n]);
 
             if total_data.windows(4).any(|w| w == b"\r\n\r\n") {
-                println!("Complete HTTP headers received");
+                println!(" header request received");
                 break;
             }
         }
 
         let response_data: Vec<u8> = total_data.to_vec();
-
         let request_str = str::from_utf8(&response_data)?;
 
         let client_id = HttpRequest::get_subdomain(request_str);
@@ -86,15 +87,29 @@ impl HttpServer {
             return Err("sending fails".into());
         }
 
-        let rec = rx_http.recv().await;
-        match rec {
+        // waiting for response from TCP client
+        match rx_http.recv().await {
             Some(value) => {
-                if value.is_empty() {
+                if !value.is_empty() {
+                    println!("Receive from client: {} bytes", value.len());
+                    let now = Local::now();
+
+                    let filename = format!(
+                        "tmp/response_{}{}{}_{}:{}{}.html",
+                        now.year(),
+                        now.month(),
+                        now.day(),
+                        now.hour(),
+                        now.minute(),
+                        now.second()
+                    );
+                    tokio::fs::write(filename, &value).await?; // <- ok , work
+
+                    stream.write_all(&value).await?;
+                } else {
                     shared_state.unregister_tcp_client(client_id.as_str()).await;
                     let response = HttpResponse::not_found().to_string();
                     stream.write_all(response.as_bytes()).await?;
-                } else {
-                    stream.write_all(&value).await?;
                 }
             }
             None => {
