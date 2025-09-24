@@ -67,7 +67,8 @@ impl HttpServer {
             .unwrap()
             + 4;
         let headers_str = str::from_utf8(&total_data[..headers_end - 4])?;
-        let content_length = parse_content_length(headers_str);
+        let content_length = HttpRequest::parse_content_length(headers_str);
+
         if let Some(body_length) = content_length {
             let body_data_received = total_data.len() - headers_end;
             let remaining_body = body_length - body_data_received;
@@ -145,17 +146,4 @@ impl HttpServer {
         stream.flush().await?;
         Ok(())
     }
-}
-
-fn parse_content_length(headers: &str) -> Option<usize> {
-    for line in headers.lines() {
-        if line.to_lowercase().starts_with("content-length:") {
-            if let Some(value) = line.split(':').nth(1) {
-                if let Ok(length) = value.trim().parse::<usize>() {
-                    return Some(length);
-                }
-            }
-        }
-    }
-    None
 }
