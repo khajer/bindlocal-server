@@ -121,7 +121,7 @@ impl HttpServer {
                     let now = Local::now();
 
                     let filename = format!(
-                        "tmp/response_{}{}{}_{}:{}{}.tcp",
+                        "tmp/response_{}-{}-{} {}:{}:{}.tcp",
                         now.year(),
                         now.month(),
                         now.day(),
