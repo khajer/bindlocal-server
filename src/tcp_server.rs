@@ -5,7 +5,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::select;
 use tokio::sync::mpsc;
-use tokio::time::Instant;
+// use tokio::time::Instant;
 
 pub struct TcpServer {
     listener: TcpListener,
@@ -65,11 +65,8 @@ impl TcpServer {
         );
         stream.write_all(welcome.as_bytes()).await?;
 
-        // let mut buffer = [0; 4096];
-
         loop {
             select! {
-                // Handle direct messages sent to this specific client
                 msg = rx_tcp.recv() => {
                     match msg {
                         Some(message) => {
@@ -84,141 +81,75 @@ impl TcpServer {
                                 break;
                             }
 
-
-                            // let mut response_data: Vec<u8> = Vec::new();
-                            // if let Err(e) = stream_local.read_to_end(&mut response_data).await {
-                            //     eprintln!("Error flushing TCP stream: {}", e);
-                            // }
-                            // println!("response completed.");
-                            // ---
-                            let mut buf = vec![0u8; 10240*4]; // Initial capacity
-                            let mut total_data = Vec::new();
+                            let mut buffer = Vec::new();
+                            let mut tmp = [0u8; 1024];
+                            let header_end;
                             loop {
-
-                                let n = stream.read(&mut buf).await?; // read from tcp stream
+                                let n = stream.read(&mut tmp).await?;
                                 if n == 0 {
-                                    break; // EOF
+                                    return Err("connection closed before headers".into());
                                 }
-                                println!("n {n}");
-                                total_data.extend_from_slice(&buf[..n]);
-
-                                if total_data.windows(4).any(|w| w == b"\r\n\r\n") {
-                                           println!("received completed ");
-                                           break;
+                                buffer.extend_from_slice(&tmp[..n]);
+                                if let Some(pos) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
+                                    header_end = pos + 4;
+                                    break;
                                 }
                             }
-                            println!("recieved size: {} bytes", total_data.len());
+                            let header_text = String::from_utf8_lossy(&buffer[..header_end]);
+                            let mut headers = HashMap::new();
+                            for line in header_text.lines().skip(1) {
+                                if let Some((k, v)) = line.split_once(": ") {
+                                    headers.insert(k.to_string(), v.to_string());
+                                }
+                            }
 
-                            // tokio::fs::write("./tmp/response_raw.html", &total_data).await?;
+                            if let Some(len) = headers.get("Content-Length") {
+                                let len = len.parse::<usize>()?;
+                                while buffer.len() < header_end + len {
+                                    let n = stream.read(&mut tmp).await?;
+                                    if n == 0 {
+                                        break;
+                                    }
+                                    buffer.extend_from_slice(&tmp[..n]);
+                                }
+                            } else if headers
+                                .get("Transfer-Encoding")
+                                .map(|v| v.to_ascii_lowercase())
+                                == Some("chunked".into())
+                            {
+                                loop {
+                                    if buffer[header_end..].windows(5).any(|w| w == b"0\r\n\r\n") {
+                                        println!("Found chunked terminator!");
+                                        break;
+                                    }
+                                    // Read more data
+                                    let n = stream.read(&mut tmp).await?;
+                                    if n == 0 {
+                                        return Err("connection closed before chunked terminator".into());
+                                    }
+                                    buffer.extend_from_slice(&tmp[..n]);
+                                }
 
-                            shared_state.send_to_http_client(client_id.as_str(), total_data).await;
+                                if let Some(terminator_pos) = buffer[header_end..]
+                                    .windows(5)
+                                    .position(|w| w == b"0\r\n\r\n")
+                                {
+                                    let end_pos = header_end + terminator_pos + 5; // Include the terminator
+                                    buffer.truncate(end_pos);
+                                }
+                            } else {
+                                println!("connection close");
+                                loop {
+                                    let n = stream.read(&mut tmp).await?;
+                                    if n == 0 {
+                                        break;
+                                    }
+                                    buffer.extend_from_slice(&tmp[..n]);
+                                }
+                            }
+                            // tokio::fs::write("./tmp/response_raw.html", &buffer).await?;
+                            shared_state.send_to_http_client(client_id.as_str(), buffer).await;
 
-                            // ----
-
-                            // println!(">>> receiving process");
-                            // let mut buffer = Vec::new();
-                            // let mut tmp = [0u8; 1024];
-                            // let header_end;
-                            // let time = Instant::now();
-                            // loop {
-                            //     let n = stream.read(&mut tmp).await?;
-                            //     if n == 0 {
-                            //         return Err("connection closed before headers".into());
-                            //     }
-                            //     buffer.extend_from_slice(&tmp[..n]);
-                            //     if let Some(pos) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
-                            //         header_end = pos + 4;
-                            //         break;
-                            //     }
-                            // }
-                            // // --- Parse headers (just enough to know how much to read) ---
-                            // let header_text = String::from_utf8_lossy(&buffer[..header_end]);
-                            // let mut headers = HashMap::new();
-                            // for line in header_text.lines().skip(1) {
-                            //     if let Some((k, v)) = line.split_once(": ") {
-                            //         headers.insert(k.to_string(), v.to_string());
-                            //     }
-                            // }
-                            // // --- Parse headers (just enough to know how much to read) ---
-                            // let header_text = String::from_utf8_lossy(&buffer[..header_end]);
-                            // let mut headers = HashMap::new();
-                            // for line in header_text.lines().skip(1) {
-                            //     if let Some((k, v)) = line.split_once(": ") {
-                            //         headers.insert(k.to_string(), v.to_string());
-                            //     }
-                            // }
-
-                            // // --- Read the body depending on headers ---
-                            // if let Some(len) = headers.get("Content-Length") {
-                            //     let len = len.parse::<usize>()?;
-                            //     while buffer.len() < header_end + len {
-                            //         let n = stream.read(&mut tmp).await?;
-                            //         if n == 0 {
-                            //             break;
-                            //         }
-                            //         buffer.extend_from_slice(&tmp[..n]);
-                            //     }
-                            // } else if headers
-                            //     .get("Transfer-Encoding")
-                            //     .map(|v| v.to_ascii_lowercase())
-                            //     == Some("chunked".into())
-                            // {
-                            //     let mut rest = buffer[header_end..].to_vec();
-                            //     loop {
-                            //         // Ensure we have a full line
-                            //         while !rest.windows(2).any(|w| w == b"\r\n") {
-                            //             let n = stream.read(&mut tmp).await?;
-                            //             if n == 0 {
-                            //                 return Err("connection closed during chunk size".into());
-                            //             }
-                            //             rest.extend_from_slice(&tmp[..n]);
-                            //         }
-
-                            //         // Get chunk size
-                            //         let pos = rest.windows(2).position(|w| w == b"\r\n").unwrap();
-                            //         let line = String::from_utf8_lossy(&rest[..pos]);
-                            //         let size = usize::from_str_radix(line.trim(), 16)?;
-                            //         let chunk_header_len = pos + 2;
-
-                            //         // Copy chunk header into buffer
-                            //         buffer.extend_from_slice(&rest[..chunk_header_len]);
-                            //         rest.drain(..chunk_header_len);
-
-                            //         if size == 0 {
-                            //             buffer.extend_from_slice(b"\r\n"); // final CRLF
-                            //             break;
-                            //         }
-
-                            //         // Ensure we have full chunk
-                            //         while rest.len() < size + 2 {
-                            //             let n = stream.read(&mut tmp).await?;
-                            //             if n == 0 {
-                            //                 return Err("connection closed during chunk body".into());
-                            //             }
-                            //             rest.extend_from_slice(&tmp[..n]);
-                            //         }
-
-                            //         // Copy chunk data + CRLF into buffer
-                            //         buffer.extend_from_slice(&rest[..size + 2]);
-                            //         rest.drain(..size + 2);
-                            //     }
-                            // } else {
-                            //     // Fallback: read until connection closes
-                            //     loop {
-                            //         let n = stream.read(&mut tmp).await?;
-                            //         if n == 0 {
-                            //             break;
-                            //         }
-                            //         buffer.extend_from_slice(&tmp[..n]);
-                            //     }
-                            // }
-                            // println!(
-                            //     "[+chunk] size: {} bytes, elapsed: {:?}",
-                            //     buffer.len(),
-                            //     time.elapsed()
-                            // );
-
-                            // shared_state.send_to_http_client(client_id.as_str(), buffer).await;
 
                         },
                         None => {
