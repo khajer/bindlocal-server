@@ -139,7 +139,6 @@ impl TcpServer {
                                 }
                             } else {
                                 println!("connection close");
-                                // Fallback: read until connection closes
                                 loop {
                                     let n = stream.read(&mut tmp).await?;
                                     if n == 0 {
