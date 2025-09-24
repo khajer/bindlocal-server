@@ -138,16 +138,19 @@ impl TcpServer {
                                     buffer.truncate(end_pos);
                                 }
                             } else {
-                                println!("connection close");
                                 loop {
+                                    if buffer[header_end..].windows(4).any(|w| w == b"\r\n\r\n") {
+                                        break;
+                                    }
+                                    // Read more data
                                     let n = stream.read(&mut tmp).await?;
                                     if n == 0 {
                                         break;
                                     }
                                     buffer.extend_from_slice(&tmp[..n]);
                                 }
+
                             }
-                            // tokio::fs::write("./tmp/response_raw.html", &buffer).await?;
                             shared_state.send_to_http_client(client_id.as_str(), buffer).await;
 
 
