@@ -46,7 +46,6 @@ impl HttpServer {
         mut stream: TcpStream,
         shared_state: SharedState,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // wait and receive message.
         let mut buf = vec![0u8; 1024]; // Initial capacity
         let mut total_data = Vec::new();
         loop {
@@ -59,6 +58,32 @@ impl HttpServer {
             if total_data.windows(4).any(|w| w == b"\r\n\r\n") {
                 println!(" header request received");
                 break;
+            }
+        }
+
+        let headers_end = total_data
+            .windows(4)
+            .position(|w| w == b"\r\n\r\n")
+            .unwrap()
+            + 4;
+        let headers_str = str::from_utf8(&total_data[..headers_end - 4])?;
+        let content_length = parse_content_length(headers_str);
+        if let Some(body_length) = content_length {
+            let body_data_received = total_data.len() - headers_end;
+            let remaining_body = body_length - body_data_received;
+            if remaining_body > 0 {
+                let mut body_buf = vec![0u8; remaining_body];
+                let mut bytes_read = 0;
+
+                while bytes_read < remaining_body {
+                    let n = stream.read(&mut body_buf[bytes_read..]).await?;
+                    if n == 0 {
+                        return Err("Unexpected EOF while reading body".into());
+                    }
+                    bytes_read += n;
+                }
+
+                total_data.extend_from_slice(&body_buf);
             }
         }
 
@@ -120,4 +145,17 @@ impl HttpServer {
         stream.flush().await?;
         Ok(())
     }
+}
+
+fn parse_content_length(headers: &str) -> Option<usize> {
+    for line in headers.lines() {
+        if line.to_lowercase().starts_with("content-length:") {
+            if let Some(value) = line.split(':').nth(1) {
+                if let Ok(length) = value.trim().parse::<usize>() {
+                    return Some(length);
+                }
+            }
+        }
+    }
+    None
 }
