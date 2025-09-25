@@ -3,6 +3,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 use chrono::{Datelike, Local, Timelike};
+use tokio::fs::File;
 
 use crate::request::HttpRequest;
 use crate::response::HttpResponse;
@@ -56,7 +57,6 @@ impl HttpServer {
             total_data.extend_from_slice(&buf[..n]);
 
             if total_data.windows(4).any(|w| w == b"\r\n\r\n") {
-                println!(" header request received");
                 break;
             }
         }
@@ -99,6 +99,8 @@ impl HttpServer {
             return Ok(());
         }
 
+        save_log_req_resp("request", &total_data).await;
+
         // waiting for
         let (tx_http, mut rx_http) = mpsc::unbounded_channel::<Vec<u8>>();
 
@@ -117,21 +119,10 @@ impl HttpServer {
         match rx_http.recv().await {
             Some(value) => {
                 if !value.is_empty() {
-                    println!("Receive from client: {} bytes", value.len());
-                    let now = Local::now();
-
-                    let filename = format!(
-                        "tmp/response_{}-{}-{} {}:{}:{}.tcp",
-                        now.year(),
-                        now.month(),
-                        now.day(),
-                        now.hour(),
-                        now.minute(),
-                        now.second()
-                    );
-                    tokio::fs::write(filename, &value).await?; // <- ok , work
-
+                    save_log_req_resp("response", &value).await;
                     stream.write_all(&value).await?;
+
+                    println!("Receive from client: {} bytes", value.len());
                 } else {
                     shared_state.unregister_tcp_client(client_id.as_str()).await;
                     let response = HttpResponse::not_found().to_string();
@@ -146,4 +137,30 @@ impl HttpServer {
         stream.flush().await?;
         Ok(())
     }
+}
+async fn save_log_req_resp(intro_str: &str, data: &[u8]) {
+    let now = Local::now();
+
+    let intro_str = format!(
+        "[{}{:02}{:02} {:02}:{:02}.{:02}] {intro_str} \n",
+        now.year(),
+        now.month().to_string(),
+        now.day(),
+        now.hour(),
+        now.minute(),
+        now.second()
+    );
+
+    println!("{intro_str}");
+    println!("{}", String::from_utf8_lossy(data));
+
+    // let filename = format!("logs/{}{}{}.log", now.year(), now.month(), now.day());
+    // let mut f = File::options()
+    //     .append(true)
+    //     .create(true)
+    //     .open(filename)
+    //     .await
+    //     .unwrap();
+    // f.write_all(intro_str.as_bytes()).await.unwrap();
+    // f.write_all(&data).await.unwrap();
 }
