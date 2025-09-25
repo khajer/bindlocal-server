@@ -1,14 +1,17 @@
+use std::fmt::format;
 use std::str;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 use chrono::{Datelike, Local, Timelike};
+use rand::Rng;
 // use tokio::fs::File;
-use uuid::Uuid;
+// use uuid::Uuid;
 
 use crate::request::HttpRequest;
 use crate::response::HttpResponse;
 use crate::shared::SharedState;
+use crate::shared::TicketRequestHttp;
 
 use tokio::sync::mpsc;
 
@@ -31,8 +34,8 @@ impl HttpServer {
 
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
-            let (socket, addr) = self.listener.accept().await?;
-            println!("New HTTP connection from: {}", addr);
+            let (socket, _addr) = self.listener.accept().await?;
+            // println!("New HTTP connection from: {}", addr);
 
             // Spawn a new task for each connection
             let shared_state = self.shared_state.clone();
@@ -50,6 +53,7 @@ impl HttpServer {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut buf = vec![0u8; 1024]; // Initial capacity
         let mut total_data = Vec::new();
+
         loop {
             let n = stream.read(&mut buf).await?;
             if n == 0 {
@@ -61,14 +65,14 @@ impl HttpServer {
                 break;
             }
         }
-
         let headers_end = total_data
             .windows(4)
             .position(|w| w == b"\r\n\r\n")
             .unwrap()
             + 4;
-        let headers_str = str::from_utf8(&total_data[..headers_end - 4])?;
-        let content_length = HttpRequest::parse_content_length(headers_str);
+        let headers_str = str::from_utf8(&total_data[..headers_end - 4])?.to_string();
+        let content_length = HttpRequest::parse_content_length(headers_str.clone());
+        // let connection = HttpRequest::parse_connection(headers_str.clone()).unwrap();
 
         if let Some(body_length) = content_length {
             let body_data_received = total_data.len() - headers_end;
@@ -89,6 +93,7 @@ impl HttpServer {
             }
         }
 
+        // --
         let response_data: Vec<u8> = total_data.to_vec();
         let request_str = str::from_utf8(&response_data)?;
 
@@ -100,18 +105,25 @@ impl HttpServer {
             return Ok(());
         }
 
-        let trx_id = Uuid::new_v4();
-        save_log_req_resp(format!("[{trx_id}] request").as_str(), &total_data).await;
+        let trx_id = generate_trx_id();
+        // println!("[{trx_id}] < Request");
+        // save_log_req_resp(format!("[{trx_id}] request").as_str(), &total_data).await;
 
         // waiting for
+        //
+        let ticket = TicketRequestHttp {
+            name: format!("{trx_id}"),
+            data: total_data,
+        };
+
         let (tx_http, mut rx_http) = mpsc::unbounded_channel::<Vec<u8>>();
 
         shared_state
-            .register_http_client(client_id.to_string(), tx_http)
+            .register_http_client(ticket.name.clone(), tx_http)
             .await;
 
         if !shared_state
-            .send_to_tcp_client(client_id.as_str(), total_data)
+            .send_to_tcp_client(client_id.as_str(), ticket)
             .await
         {
             return Err("sending fails".into());
@@ -121,49 +133,58 @@ impl HttpServer {
         match rx_http.recv().await {
             Some(value) => {
                 if !value.is_empty() {
-                    save_log_req_resp(format!("[{trx_id}] response").as_str(), &value).await;
+                    // println!("[{trx_id}] > OK");
+                    // save_log_req_resp(format!("[{trx_id}] response").as_str(), &value).await;
                     stream.write_all(&value).await?;
-                    // println!("Receive from client: {} bytes", value.len());
                 } else {
-                    println!("[{trx_id}] response: Empty");
-                    shared_state.unregister_tcp_client(client_id.as_str()).await;
+                    println!("[{trx_id}] > Empty");
+                    // shared_state.unregister_tcp_client(client_id.as_str()).await;
                     let response = HttpResponse::not_found().to_string();
                     stream.write_all(response.as_bytes()).await?;
                 }
             }
             None => {
-                println!("[{trx_id}] response: None");
-                let response = HttpResponse::server_response_error().to_string();
+                // println!("[{trx_id}] > None");
+                let response = HttpResponse::service_unavailable().to_string();
                 stream.write_all(response.as_bytes()).await?;
             }
         }
         stream.flush().await?;
+
+        // println!("close connection");
         Ok(())
     }
 }
-async fn save_log_req_resp(intro_str: &str, data: &[u8]) {
-    let now = Local::now();
 
-    let intro_str = format!(
-        "[{}{:02}{:02} {:02}:{:02}.{:02}] {intro_str} \n",
-        now.year(),
-        now.month().to_string(),
-        now.day(),
-        now.hour(),
-        now.minute(),
-        now.second()
-    );
+// async fn save_log_req_resp(str: &str, data: &[u8]) {
+// let now = Local::now();
 
-    println!("{intro_str}");
-    println!("{}", String::from_utf8_lossy(data));
+// let intro_str = format!(
+//     "[{}{:02}{:02} {:02}:{:02}.{:02}] {intro_str} \n",
+//     now.year(),
+//     now.month().to_string(),
+//     now.day(),
+//     now.hour(),
+//     now.minute(),
+//     now.second()
+// );
 
-    // let filename = format!("logs/{}{}{}.log", now.year(), now.month(), now.day());
-    // let mut f = File::options()
-    //     .append(true)
-    //     .create(true)
-    //     .open(filename)
-    //     .await
-    //     .unwrap();
-    // f.write_all(intro_str.as_bytes()).await.unwrap();
-    // f.write_all(&data).await.unwrap();
+// println!("{intro_str}");
+// println!("{}", String::from_utf8_lossy(data));
+
+// let filename = format!("logs/{}{}{}.log", now.year(), now.month(), now.day());
+// let mut f = File::options()
+//     .append(true)
+//     .create(true)
+//     .open(filename)
+//     .await
+//     .unwrap();
+// f.write_all(intro_str.as_bytes()).await.unwrap();
+// f.write_all(&data).await.unwrap();
+// }
+
+fn generate_trx_id() -> String {
+    let mut rng = rand::rng();
+    let tx_id: u32 = rng.random_range(10000000..100000000); // 8-digit number
+    format!("tx-{:x}", tx_id)
 }
