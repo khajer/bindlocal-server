@@ -109,7 +109,7 @@ impl HttpServer {
             .await;
 
         if !shared_state
-            .send_to_tcp_client(client_id.as_str(), response_data)
+            .send_to_tcp_client(client_id.as_str(), total_data)
             .await
         {
             return Err("sending fails".into());
@@ -121,7 +121,6 @@ impl HttpServer {
                 if !value.is_empty() {
                     save_log_req_resp("response", &value).await;
                     stream.write_all(&value).await?;
-
                     println!("Receive from client: {} bytes", value.len());
                 } else {
                     shared_state.unregister_tcp_client(client_id.as_str()).await;
