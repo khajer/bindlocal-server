@@ -138,22 +138,9 @@ impl TcpServer {
                                     buffer.truncate(end_pos);
                                 }
                             } else {
-                                loop {
-                                    if buffer[header_end..].windows(4).any(|w| w == b"\r\n\r\n") {
-                                        break;
-                                    }
-                                    // Read more data
-                                    let n = stream.read(&mut tmp).await?;
-                                    if n == 0 {
-                                        break;
-                                    }
-                                    buffer.extend_from_slice(&tmp[..n]);
-                                }
-
+                                // case return only header for example: 304, 201
                             }
                             shared_state.send_to_http_client(client_id.as_str(), buffer).await;
-
-
                         },
                         None => {
                             println!("TCP client {} channel closed", client_id);
