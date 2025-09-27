@@ -3,7 +3,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 use chrono::{Datelike, Local, Timelike};
-use tokio::fs::File;
+// use tokio::fs::File;
+use uuid::Uuid;
 
 use crate::request::HttpRequest;
 use crate::response::HttpResponse;
@@ -99,7 +100,8 @@ impl HttpServer {
             return Ok(());
         }
 
-        save_log_req_resp("request", &total_data).await;
+        let trx_id = Uuid::new_v4();
+        save_log_req_resp(format!("[{trx_id}] request").as_str(), &total_data).await;
 
         // waiting for
         let (tx_http, mut rx_http) = mpsc::unbounded_channel::<Vec<u8>>();
@@ -119,16 +121,18 @@ impl HttpServer {
         match rx_http.recv().await {
             Some(value) => {
                 if !value.is_empty() {
-                    save_log_req_resp("response", &value).await;
+                    save_log_req_resp(format!("[{trx_id}] response").as_str(), &value).await;
                     stream.write_all(&value).await?;
-                    println!("Receive from client: {} bytes", value.len());
+                    // println!("Receive from client: {} bytes", value.len());
                 } else {
+                    println!("[{trx_id}] response: empty");
                     shared_state.unregister_tcp_client(client_id.as_str()).await;
                     let response = HttpResponse::not_found().to_string();
                     stream.write_all(response.as_bytes()).await?;
                 }
             }
             None => {
+                println!("[{trx_id}] response: None");
                 let response = HttpResponse::not_found().to_string();
                 stream.write_all(response.as_bytes()).await?;
             }
