@@ -27,6 +27,11 @@ impl HttpResponse {
     //     Self::new(200, "OK", "application/json", body)
     // }
 
+    pub fn server_response_error() -> Self {
+        let body = "error";
+        Self::new(500, "error", "text/plain", body)
+    }
+
     pub fn not_found() -> Self {
         let body = r#"<!DOCTYPE html>
 <html>

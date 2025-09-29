@@ -104,6 +104,7 @@ impl TcpServer {
                             }
 
                             if let Some(len) = headers.get("Content-Length") {
+                                println!("response case: Content-Length");
                                 let len = len.parse::<usize>()?;
                                 while buffer.len() < header_end + len {
                                     let n = stream.read(&mut tmp).await?;
@@ -117,6 +118,7 @@ impl TcpServer {
                                 .map(|v| v.to_ascii_lowercase())
                                 == Some("chunked".into())
                             {
+                                println!("response case: Transfer-Encoding");
                                 loop {
                                     if buffer[header_end..].windows(5).any(|w| w == b"0\r\n\r\n") {
                                         println!("Found chunked terminator!");
@@ -138,6 +140,7 @@ impl TcpServer {
                                     buffer.truncate(end_pos);
                                 }
                             } else {
+                                println!("response case: only Header");
                                 // case return only header for example: 304, 201
                             }
                             shared_state.send_to_http_client(client_id.as_str(), buffer).await;

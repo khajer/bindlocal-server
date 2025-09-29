@@ -125,7 +125,7 @@ impl HttpServer {
                     stream.write_all(&value).await?;
                     // println!("Receive from client: {} bytes", value.len());
                 } else {
-                    println!("[{trx_id}] response: empty");
+                    println!("[{trx_id}] response: Empty");
                     shared_state.unregister_tcp_client(client_id.as_str()).await;
                     let response = HttpResponse::not_found().to_string();
                     stream.write_all(response.as_bytes()).await?;
@@ -133,7 +133,7 @@ impl HttpServer {
             }
             None => {
                 println!("[{trx_id}] response: None");
-                let response = HttpResponse::not_found().to_string();
+                let response = HttpResponse::server_response_error().to_string();
                 stream.write_all(response.as_bytes()).await?;
             }
         }
