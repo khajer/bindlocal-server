@@ -5,8 +5,6 @@ use tokio::net::{TcpListener, TcpStream};
 
 use chrono::{Datelike, Local, Timelike};
 use rand::Rng;
-// use tokio::fs::File;
-// use uuid::Uuid;
 
 use crate::request::HttpRequest;
 use crate::response::HttpResponse;
@@ -35,7 +33,6 @@ impl HttpServer {
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             let (socket, _addr) = self.listener.accept().await?;
-            // println!("New HTTP connection from: {}", addr);
 
             // Spawn a new task for each connection
             let shared_state = self.shared_state.clone();
@@ -106,11 +103,7 @@ impl HttpServer {
         }
 
         let trx_id = generate_trx_id();
-        // println!("[{trx_id}] < Request");
-        // save_log_req_resp(format!("[{trx_id}] request").as_str(), &total_data).await;
 
-        // waiting for
-        //
         let ticket = TicketRequestHttp {
             name: format!("{trx_id}"),
             data: total_data,
@@ -133,55 +126,22 @@ impl HttpServer {
         match rx_http.recv().await {
             Some(value) => {
                 if !value.is_empty() {
-                    // println!("[{trx_id}] > OK");
-                    // save_log_req_resp(format!("[{trx_id}] response").as_str(), &value).await;
                     stream.write_all(&value).await?;
                 } else {
-                    println!("[{trx_id}] > Empty");
-                    // shared_state.unregister_tcp_client(client_id.as_str()).await;
                     let response = HttpResponse::not_found().to_string();
                     stream.write_all(response.as_bytes()).await?;
                 }
             }
             None => {
-                // println!("[{trx_id}] > None");
                 let response = HttpResponse::service_unavailable().to_string();
                 stream.write_all(response.as_bytes()).await?;
             }
         }
         stream.flush().await?;
 
-        // println!("close connection");
         Ok(())
     }
 }
-
-// async fn save_log_req_resp(str: &str, data: &[u8]) {
-// let now = Local::now();
-
-// let intro_str = format!(
-//     "[{}{:02}{:02} {:02}:{:02}.{:02}] {intro_str} \n",
-//     now.year(),
-//     now.month().to_string(),
-//     now.day(),
-//     now.hour(),
-//     now.minute(),
-//     now.second()
-// );
-
-// println!("{intro_str}");
-// println!("{}", String::from_utf8_lossy(data));
-
-// let filename = format!("logs/{}{}{}.log", now.year(), now.month(), now.day());
-// let mut f = File::options()
-//     .append(true)
-//     .create(true)
-//     .open(filename)
-//     .await
-//     .unwrap();
-// f.write_all(intro_str.as_bytes()).await.unwrap();
-// f.write_all(&data).await.unwrap();
-// }
 
 fn generate_trx_id() -> String {
     let mut rng = rand::rng();

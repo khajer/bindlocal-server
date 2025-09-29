@@ -5,7 +5,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::select;
 use tokio::sync::mpsc;
-// use tokio::time::Instant;
+
 use crate::shared::TicketRequestHttp;
 
 pub struct TcpServer {
@@ -57,13 +57,6 @@ impl TcpServer {
         shared_state
             .register_tcp_client(client_id.to_string(), tx_tcp)
             .await;
-
-        // // waiting for
-        // let (tx_http, rx_http) = mpsc::unbounded_channel::<Vec<u8>>();
-        // shared_state
-        //     .register_http_client(client_id.to_string(), tx_http)
-        //     .await;
-        // shared_state.register_rx_http_client(&client_id.clone(), rx_http);
 
         // Send welcome message
         let welcome = format!(
@@ -149,12 +142,9 @@ impl TcpServer {
                                     buffer.truncate(end_pos);
                                 }
                             } else {
-                                // println!("response case: only Header");
                                 // case return only header for example: 304, 201
                             }
                             println!("Receive from client: {} bytes", buffer.len());
-                            // println!("{}", String::from_utf8_lossy(&buffer));
-
                             shared_state.send_to_http_client(ticket.name.as_str(), buffer).await;
                         },
                         None => {

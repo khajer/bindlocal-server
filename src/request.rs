@@ -1,6 +1,4 @@
-pub struct HttpRequest {
-    // pub sub_domain: String,
-}
+pub struct HttpRequest {}
 
 impl HttpRequest {
     pub fn get_subdomain(request: &str) -> String {

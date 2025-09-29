@@ -12,7 +12,6 @@ pub struct TicketRequestHttp {
 pub struct SharedState {
     pub tcp_connections: Arc<Mutex<HashMap<String, mpsc::UnboundedSender<TicketRequestHttp>>>>,
     pub http_connections: Arc<Mutex<HashMap<String, mpsc::UnboundedSender<Vec<u8>>>>>,
-    // pub rx_http_clients: Arc<Mutex<HashMap<String, mpsc::UnboundedReceiver<Vec<u8>>>>>,
 }
 
 impl SharedState {
@@ -20,7 +19,6 @@ impl SharedState {
         let state = SharedState {
             tcp_connections: Arc::new(Mutex::new(HashMap::new())),
             http_connections: Arc::new(Mutex::new(HashMap::new())),
-            // rx_http_clients: Arc::new(Mutex::new(HashMap::new())),
         };
         state
     }
@@ -48,7 +46,7 @@ impl SharedState {
                 }
             }
         } else {
-            println!("cannot connect client id {}", client_id);
+            println!("cannot connect http client id {}", client_id);
             false
         }
     }
@@ -75,24 +73,4 @@ impl SharedState {
 
         connections.insert(client_id, tx);
     }
-
-    // rx for front
-    // pub async fn register_rx_http_client(
-    //     &self,
-    //     client_id: &str,
-    //     mut rx: UnboundedReceiver<Vec<u8>>,
-    // ) {
-    //     let mut rx_http_clients = self.rx_http_clients.lock().await;
-    //     rx_http_clients.insert(client_id, rx);
-    // }
-    // pub async fn get_rx_http_client(
-    //     &self,
-    //     client_id: &str,
-    // ) -> Option<mpsc::UnboundedReceiver<Vec<u8>>> {
-    //     let rx_http_clients = self.rx_http_clients.lock().await;
-    //     let connections = self.tcp_connections.lock().await;
-
-    //     rx_http_clients.get(client_id)
-    // }
-    //
 }
