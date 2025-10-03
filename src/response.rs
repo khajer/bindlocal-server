@@ -27,9 +27,9 @@ impl HttpResponse {
     //     Self::new(200, "OK", "application/json", body)
     // }
 
-    pub fn server_response_error() -> Self {
-        let body = "error";
-        Self::new(500, "error", "text/plain", body)
+    pub fn service_unavailable() -> Self {
+        let body = "service unavailable";
+        Self::new(503, "error", "text/plain", body)
     }
 
     pub fn not_found() -> Self {

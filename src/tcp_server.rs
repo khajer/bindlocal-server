@@ -5,7 +5,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::select;
 use tokio::sync::mpsc;
-// use tokio::time::Instant;
+
+use crate::shared::TicketRequestHttp;
 
 pub struct TcpServer {
     listener: TcpListener,
@@ -52,8 +53,7 @@ impl TcpServer {
         shared_state: SharedState,
         client_id: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (tx_tcp, mut rx_tcp) = mpsc::unbounded_channel::<Vec<u8>>();
-
+        let (tx_tcp, mut rx_tcp) = mpsc::unbounded_channel::<TicketRequestHttp>();
         shared_state
             .register_tcp_client(client_id.to_string(), tx_tcp)
             .await;
@@ -69,7 +69,9 @@ impl TcpServer {
             select! {
                 msg = rx_tcp.recv() => {
                     match msg {
-                        Some(message) => {
+                        Some(ticket) => {
+
+                            let message = ticket.data;
                             if let Err(e) = stream.write_all(&message).await {
                                 eprintln!("Error sending direct message to TCP client {}: {}", client_id, e);
                                 shared_state.send_to_http_client(client_id.as_str(), vec![]).await;
@@ -104,7 +106,7 @@ impl TcpServer {
                             }
 
                             if let Some(len) = headers.get("Content-Length") {
-                                println!("response case: Content-Length");
+                                // println!("response case: Content-Length");
                                 let len = len.parse::<usize>()?;
                                 while buffer.len() < header_end + len {
                                     let n = stream.read(&mut tmp).await?;
@@ -118,7 +120,7 @@ impl TcpServer {
                                 .map(|v| v.to_ascii_lowercase())
                                 == Some("chunked".into())
                             {
-                                println!("response case: Transfer-Encoding");
+                                // println!("response case: Transfer-Encoding");
                                 loop {
                                     if buffer[header_end..].windows(5).any(|w| w == b"0\r\n\r\n") {
                                         println!("Found chunked terminator!");
@@ -140,13 +142,13 @@ impl TcpServer {
                                     buffer.truncate(end_pos);
                                 }
                             } else {
-                                println!("response case: only Header");
                                 // case return only header for example: 304, 201
                             }
-                            shared_state.send_to_http_client(client_id.as_str(), buffer).await;
+                            println!("Receive from client: {} bytes", buffer.len());
+                            shared_state.send_to_http_client(ticket.name.as_str(), buffer).await;
                         },
                         None => {
-                            println!("TCP client {} channel closed", client_id);
+                            println!("TCP client application close: [{}] ", client_id);
                             shared_state
                                 .unregister_tcp_client(client_id.as_str()).await;
                             break;
