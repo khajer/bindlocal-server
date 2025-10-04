@@ -37,7 +37,7 @@ impl SharedState {
         if let Some(tx_http) = connections.get(client_id) {
             match tx_http.send(message) {
                 Ok(_) => {
-                    println!("send message to HTTP client");
+                    // println!("send message to HTTP client");
                     true
                 }
                 Err(e) => {
