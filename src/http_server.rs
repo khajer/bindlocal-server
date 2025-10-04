@@ -1,9 +1,9 @@
-use std::fmt::format;
+// use std::fmt::format;
 use std::str;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-use chrono::{Datelike, Local, Timelike};
+// use chrono::{Datelike, Local, Timelike};
 use rand::Rng;
 
 use crate::request::HttpRequest;
@@ -48,97 +48,101 @@ impl HttpServer {
         mut stream: TcpStream,
         shared_state: SharedState,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut buf = vec![0u8; 1024]; // Initial capacity
-        let mut total_data = Vec::new();
-
         loop {
-            let n = stream.read(&mut buf).await?;
-            if n == 0 {
-                break; // EOF
-            }
-            total_data.extend_from_slice(&buf[..n]);
-
-            if total_data.windows(4).any(|w| w == b"\r\n\r\n") {
-                break;
-            }
-        }
-        let headers_end = total_data
-            .windows(4)
-            .position(|w| w == b"\r\n\r\n")
-            .unwrap()
-            + 4;
-        let headers_str = str::from_utf8(&total_data[..headers_end - 4])?.to_string();
-        let content_length = HttpRequest::parse_content_length(headers_str.clone());
-        // let connection = HttpRequest::parse_connection(headers_str.clone()).unwrap();
-
-        if let Some(body_length) = content_length {
-            let body_data_received = total_data.len() - headers_end;
-            let remaining_body = body_length - body_data_received;
-            if remaining_body > 0 {
-                let mut body_buf = vec![0u8; remaining_body];
-                let mut bytes_read = 0;
-
-                while bytes_read < remaining_body {
-                    let n = stream.read(&mut body_buf[bytes_read..]).await?;
-                    if n == 0 {
-                        return Err("Unexpected EOF while reading body".into());
-                    }
-                    bytes_read += n;
+            let mut buf = vec![0u8; 1024]; // Initial capacity
+            let mut total_data = Vec::new();
+            loop {
+                let n = stream.read(&mut buf).await?;
+                if n == 0 {
+                    break; // EOF
                 }
+                total_data.extend_from_slice(&buf[..n]);
 
-                total_data.extend_from_slice(&body_buf);
+                if total_data.windows(4).any(|w| w == b"\r\n\r\n") {
+                    break;
+                }
             }
-        }
 
-        // --
-        let response_data: Vec<u8> = total_data.to_vec();
-        let request_str = str::from_utf8(&response_data)?;
+            let headers_end = total_data
+                .windows(4)
+                .position(|w| w == b"\r\n\r\n")
+                .unwrap()
+                + 4;
+            let headers_str = str::from_utf8(&total_data[..headers_end - 4])?.to_string();
+            let content_length = HttpRequest::parse_content_length(headers_str.clone());
+            let connection_type = HttpRequest::parse_connection(headers_str.clone()).unwrap();
 
-        let client_id = HttpRequest::get_subdomain(request_str);
-        if client_id == "" {
-            let response = HttpResponse::not_found().to_string();
-            stream.write_all(response.as_bytes()).await?;
-            stream.flush().await?;
-            return Ok(());
-        }
+            if let Some(body_length) = content_length {
+                let body_data_received = total_data.len() - headers_end;
+                let remaining_body = body_length - body_data_received;
+                if remaining_body > 0 {
+                    let mut body_buf = vec![0u8; remaining_body];
+                    let mut bytes_read = 0;
 
-        let trx_id = generate_trx_id();
+                    while bytes_read < remaining_body {
+                        let n = stream.read(&mut body_buf[bytes_read..]).await?;
+                        if n == 0 {
+                            return Err("Unexpected EOF while reading body".into());
+                        }
+                        bytes_read += n;
+                    }
 
-        let ticket = TicketRequestHttp {
-            name: format!("{trx_id}"),
-            data: total_data,
-        };
+                    total_data.extend_from_slice(&body_buf);
+                }
+            }
 
-        let (tx_http, mut rx_http) = mpsc::unbounded_channel::<Vec<u8>>();
+            // --
+            let response_data: Vec<u8> = total_data.to_vec();
+            let request_str = str::from_utf8(&response_data)?;
 
-        shared_state
-            .register_http_client(ticket.name.clone(), tx_http)
-            .await;
+            let client_id = HttpRequest::get_subdomain(request_str);
+            if client_id == "" {
+                let response = HttpResponse::not_found().to_string();
+                stream.write_all(response.as_bytes()).await?;
+                stream.flush().await?;
+                return Ok(());
+            }
 
-        if !shared_state
-            .send_to_tcp_client(client_id.as_str(), ticket)
-            .await
-        {
-            return Err("sending fails".into());
-        }
+            let trx_id = generate_trx_id();
 
-        // waiting for response from TCP client
-        match rx_http.recv().await {
-            Some(value) => {
-                if !value.is_empty() {
-                    stream.write_all(&value).await?;
-                } else {
-                    let response = HttpResponse::not_found().to_string();
+            let ticket = TicketRequestHttp {
+                name: format!("{trx_id}"),
+                data: total_data,
+            };
+
+            let (tx_http, mut rx_http) = mpsc::unbounded_channel::<Vec<u8>>();
+
+            shared_state
+                .register_http_client(ticket.name.clone(), tx_http)
+                .await;
+
+            if !shared_state
+                .send_to_tcp_client(client_id.as_str(), ticket)
+                .await
+            {
+                return Err("sending fails".into());
+            }
+
+            // waiting for response from TCP client
+            match rx_http.recv().await {
+                Some(value) => {
+                    if !value.is_empty() {
+                        stream.write_all(&value).await?;
+                    } else {
+                        let response = HttpResponse::not_found().to_string();
+                        stream.write_all(response.as_bytes()).await?;
+                    }
+                }
+                None => {
+                    let response = HttpResponse::service_unavailable().to_string();
                     stream.write_all(response.as_bytes()).await?;
                 }
             }
-            None => {
-                let response = HttpResponse::service_unavailable().to_string();
-                stream.write_all(response.as_bytes()).await?;
+            stream.flush().await?;
+            if connection_type == "close" {
+                break;
             }
         }
-        stream.flush().await?;
-
         Ok(())
     }
 }
