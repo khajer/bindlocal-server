@@ -66,12 +66,6 @@ impl HttpServer {
             let headers_end = match header {
                 Some(value) => value + 4,
                 None => {
-                    println!(
-                        "total data header : len = {}, {:?}, {}",
-                        total_data.len(),
-                        total_data,
-                        String::from_utf8_lossy(&total_data)
-                    );
                     break;
                 }
             };
@@ -99,7 +93,6 @@ impl HttpServer {
                 }
             }
 
-            // --
             let response_data: Vec<u8> = total_data.to_vec();
             let request_str = str::from_utf8(&response_data)?;
 
