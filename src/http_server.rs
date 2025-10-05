@@ -63,11 +63,20 @@ impl HttpServer {
                 }
             }
 
-            let headers_end = total_data
-                .windows(4)
-                .position(|w| w == b"\r\n\r\n")
-                .unwrap()
-                + 4;
+            let header = total_data.windows(4).position(|w| w == b"\r\n\r\n");
+            let headers_end = match header {
+                Some(value) => value + 4,
+                None => {
+                    println!(
+                        "total data header : len = {}, {:?}, {}",
+                        total_data.len(),
+                        total_data,
+                        String::from_utf8_lossy(&total_data)
+                    );
+                    break;
+                }
+            };
+
             let headers_str = str::from_utf8(&total_data[..headers_end - 4])?.to_string();
             let content_length = HttpRequest::parse_content_length(headers_str.clone());
             let connection_type = HttpRequest::parse_connection(headers_str.clone()).unwrap();
