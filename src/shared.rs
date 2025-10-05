@@ -36,10 +36,7 @@ impl SharedState {
         let connections = self.http_connections.lock().await;
         if let Some(tx_http) = connections.get(client_id) {
             match tx_http.send(message) {
-                Ok(_) => {
-                    // println!("send message to HTTP client");
-                    true
-                }
+                Ok(_) => true,
                 Err(e) => {
                     eprintln!("Failed to send message to HTTP client: {}", e);
                     false

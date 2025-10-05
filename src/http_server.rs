@@ -1,8 +1,7 @@
-// use std::fmt::format;
 use std::str;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-
+use tokio::sync::mpsc::UnboundedReceiver;
 // use chrono::{Datelike, Local, Timelike};
 use rand::Rng;
 
@@ -67,12 +66,6 @@ impl HttpServer {
             let headers_end = match header {
                 Some(value) => value + 4,
                 None => {
-                    println!(
-                        "total data header : len = {}, {:?}, {}",
-                        total_data.len(),
-                        total_data,
-                        String::from_utf8_lossy(&total_data)
-                    );
                     break;
                 }
             };
@@ -100,7 +93,6 @@ impl HttpServer {
                 }
             }
 
-            // --
             let response_data: Vec<u8> = total_data.to_vec();
             let request_str = str::from_utf8(&response_data)?;
 
@@ -119,7 +111,7 @@ impl HttpServer {
                 data: total_data,
             };
 
-            let (tx_http, mut rx_http) = mpsc::unbounded_channel::<Vec<u8>>();
+            let (tx_http, rx_http) = mpsc::unbounded_channel::<Vec<u8>>();
 
             shared_state
                 .register_http_client(ticket.name.clone(), tx_http)
@@ -133,27 +125,31 @@ impl HttpServer {
             }
 
             // waiting for response from TCP client
-            match rx_http.recv().await {
-                Some(value) => {
-                    if !value.is_empty() {
-                        stream.write_all(&value).await?;
-                    } else {
-                        let response = HttpResponse::not_found().to_string();
-                        stream.write_all(response.as_bytes()).await?;
-                    }
-                }
-                None => {
-                    let response = HttpResponse::service_unavailable().to_string();
-                    stream.write_all(response.as_bytes()).await?;
-                }
-            }
-            stream.flush().await?;
+            wait_for_tcp_response(rx_http, &mut stream).await;
+
             if connection_type == "close" {
                 break;
             }
         }
         Ok(())
     }
+}
+async fn wait_for_tcp_response(mut rx_http: UnboundedReceiver<Vec<u8>>, stream: &mut TcpStream) {
+    match rx_http.recv().await {
+        Some(value) => {
+            if !value.is_empty() {
+                stream.write_all(&value).await.unwrap();
+            } else {
+                let response = HttpResponse::not_found().to_string();
+                stream.write_all(response.as_bytes()).await.unwrap();
+            }
+        }
+        None => {
+            let response = HttpResponse::service_unavailable().to_string();
+            stream.write_all(response.as_bytes()).await.unwrap();
+        }
+    }
+    stream.flush().await.unwrap();
 }
 
 fn generate_trx_id() -> String {

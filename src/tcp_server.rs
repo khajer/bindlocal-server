@@ -120,10 +120,8 @@ impl TcpServer {
                                 .map(|v| v.to_ascii_lowercase())
                                 == Some("chunked".into())
                             {
-                                // println!("response case: Transfer-Encoding");
                                 loop {
                                     if buffer[header_end..].windows(5).any(|w| w == b"0\r\n\r\n") {
-                                        // println!("Found chunked terminator!");
                                         break;
                                     }
                                     // Read more data
