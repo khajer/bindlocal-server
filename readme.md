@@ -11,3 +11,9 @@ proxy server app.
 
 # roadmap
 - test first on react-app
+
+
+# docker build
+```
+docker build . -t connl:0.0.1
+```
