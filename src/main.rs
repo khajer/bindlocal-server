@@ -24,8 +24,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         9090
     };
 
-    let http_addr = format!("127.0.0.1:{}", http_port);
-    let tcp_addr = format!("127.0.0.1:{}", tcp_port);
+    let http_addr = format!("0.0.0.0:{}", http_port);
+    let tcp_addr = format!("0.0.0.0:{}", tcp_port);
 
     println!("Starting servers...");
     println!("HTTP Server will run on http://{}", http_addr);
