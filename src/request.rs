@@ -29,7 +29,7 @@ impl HttpRequest {
         for line in headers.lines() {
             if line.to_lowercase().starts_with("connection:") {
                 if let Some(value) = line.split(':').nth(1) {
-                    return Some(value.to_string());
+                    return Some(value.trim().to_string());
                 }
             }
         }
@@ -52,6 +52,12 @@ mod tests {
         let request = "GET / HTTP/1.1\r\nHost: test.example.com\r\n\r\n";
         let result = HttpRequest::get_subdomain(request);
         assert_eq!(result, "test");
+    }
+    #[test]
+    fn test_longname_url_request() {
+        let request = "GET / HTTP/1.1\r\nHost: app-test-10.test.example.com\r\n\r\n";
+        let result = HttpRequest::get_subdomain(request);
+        assert_eq!(result, "app-test-10");
     }
 
     #[test]
@@ -82,7 +88,7 @@ mod tests {
     }
     #[test]
     fn test_parse_connection_empty() {
-        let headers = "Connection:\r\n".to_string();
+        let headers = "xxx:\r\n".to_string();
         let result = HttpRequest::parse_connection(headers);
         assert_eq!(result, None);
     }
