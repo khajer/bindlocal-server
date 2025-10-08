@@ -31,7 +31,7 @@ impl TcpServer {
             let (socket, addr) = self.listener.accept().await?;
             println!("New TCP connection from: {}", addr);
 
-            let client_id = format!("{:04}", client_cnt);
+            let client_id = format!("app-{:04}", client_cnt);
             client_cnt += 1;
             println!("client id [{}]", client_id);
 
@@ -60,7 +60,7 @@ impl TcpServer {
 
         // Send welcome message
         let welcome = format!(
-            "Connected the Server\nhost: http://{}.localhost:8080",
+            "Connected the Server\nhost: http://{}.connl.io:8080",
             client_id
         );
         stream.write_all(welcome.as_bytes()).await?;
