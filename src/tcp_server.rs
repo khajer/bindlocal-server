@@ -59,10 +59,7 @@ impl TcpServer {
             .await;
 
         // Send welcome message
-        let welcome = format!(
-            "Connected the Server\nhost: http://{}.connl.io:8080",
-            client_id
-        );
+        let welcome = format!("Connected the Server\nhost: http://{}.connl.io", client_id);
         stream.write_all(welcome.as_bytes()).await?;
 
         loop {
