@@ -2,8 +2,8 @@
 --
 
 wrk.method = "GET"
-wrk.path = "/node_modules/@sveltejs/kit/src/runtime/client/client.js?v=e32e175e"
--- wrk.path = "/"
+-- wrk.path = "/node_modules/@sveltejs/kit/src/runtime/client/client.js?v=e32e175e"
+wrk.path = "/"
 
 
 wrk.headers = {
@@ -12,8 +12,7 @@ wrk.headers = {
     ["Accept-Language"] = "en-US,en;q=0.9",
     ["Connection"] = "keep-alive",
     ["Origin"] = "http://0001.localhost:8080",
-    ["Referer"] =
-    "http://0001.localhost:8080/",
+    ["Referer"] = "http://0001.localhost:8080/",
     ["Sec-Fetch-Dest"] = "script",
     ["Sec-Fetch-Mode"] = "cors",
     ["Sec-Fetch-Site"] = "same-origin",
