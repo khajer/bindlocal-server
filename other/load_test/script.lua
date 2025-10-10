@@ -13,7 +13,7 @@ wrk.headers = {
     ["Connection"] = "keep-alive",
     ["Origin"] = "http://0001.localhost:8080",
     ["Referer"] =
-    "http://0001.localhost:8080/@fs/Users/itsara/sourcecode/svelte/myapp/node_modules/@sveltejs/kit/src/runtime/client/start.js",
+    "http://0001.localhost:8080/",
     ["Sec-Fetch-Dest"] = "script",
     ["Sec-Fetch-Mode"] = "cors",
     ["Sec-Fetch-Site"] = "same-origin",
