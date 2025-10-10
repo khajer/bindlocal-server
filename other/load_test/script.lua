@@ -1,4 +1,5 @@
---- t1 -10 -d1s -s script.lua http://localhost:8080
+-- command line test:
+-- wrk -t1 -c10 -d1s -s script.lua http://localhost:8080
 --
 
 wrk.method = "GET"
