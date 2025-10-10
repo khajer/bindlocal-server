@@ -139,7 +139,6 @@ impl TcpServer {
                             } else {
                                 // case return only header for example: 304, 201
                             }
-                            println!("Receive from client: {} bytes", buffer.len());
                             shared_state.send_to_http_client(ticket.name.as_str(), buffer).await;
                         },
                         None => {
