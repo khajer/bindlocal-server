@@ -72,7 +72,7 @@ impl HttpServer {
 
             let headers_str = str::from_utf8(&total_data[..headers_end - 4])?.to_string();
             let content_length = HttpRequest::parse_content_length(headers_str.clone());
-            let connection_type = HttpRequest::parse_connection(headers_str.clone()).unwrap();
+            // let connection_type = HttpRequest::parse_connection(headers_str.clone());
 
             if let Some(body_length) = content_length {
                 let body_data_received = total_data.len() - headers_end;
@@ -127,8 +127,10 @@ impl HttpServer {
             // waiting for response from TCP client
             wait_for_tcp_response(rx_http, &mut stream).await;
 
-            if connection_type == "close" {
-                break;
+            if let Some(conn_type) = HttpRequest::parse_connection(headers_str.clone()) {
+                if conn_type == "close" {
+                    break;
+                }
             }
         }
         Ok(())
