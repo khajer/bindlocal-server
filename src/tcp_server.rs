@@ -1,4 +1,5 @@
 use crate::shared::SharedState;
+use rand::Rng;
 use std::collections::HashMap;
 use std::str;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -26,13 +27,11 @@ impl TcpServer {
     }
 
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut client_cnt = 1;
         loop {
             let (socket, addr) = self.listener.accept().await?;
             println!("New TCP connection from: {}", addr);
 
-            let client_id = format!("app-{:04}", client_cnt);
-            client_cnt += 1;
+            let client_id = generate_name();
             println!("client id [{}]", client_id);
 
             let shared_state = self.shared_state.clone();
@@ -152,5 +151,22 @@ impl TcpServer {
             }
         }
         Ok(())
+    }
+}
+
+fn generate_name() -> String {
+    let mut rng = rand::rng();
+    let name = format!("app-{}", rng.random_range(0..10000));
+    name
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_name() {
+        let result = generate_name();
+        assert_eq!(result.len(), 8);
     }
 }
