@@ -1,9 +1,8 @@
+use rand::Rng;
 use std::str;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::UnboundedReceiver;
-// use chrono::{Datelike, Local, Timelike};
-use rand::Rng;
 
 use crate::request::HttpRequest;
 use crate::response::HttpResponse;
@@ -72,7 +71,6 @@ impl HttpServer {
 
             let headers_str = str::from_utf8(&total_data[..headers_end - 4])?.to_string();
             let content_length = HttpRequest::parse_content_length(headers_str.clone());
-            // let connection_type = HttpRequest::parse_connection(headers_str.clone());
 
             if let Some(body_length) = content_length {
                 let body_data_received = total_data.len() - headers_end;
@@ -158,4 +156,15 @@ fn generate_trx_id() -> String {
     let mut rng = rand::rng();
     let tx_id: u32 = rng.random_range(10000000..100000000); // 8-digit number
     format!("tx-{:x}", tx_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_trx_id() {
+        let id = generate_trx_id();
+        assert_eq!(id.len(), 10); // 8-digit number + "tx-"
+    }
 }

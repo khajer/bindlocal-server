@@ -29,10 +29,10 @@ impl TcpServer {
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             let (socket, addr) = self.listener.accept().await?;
-            println!("New TCP connection from: {}", addr);
+            tracing::info!("New TCP connection from: {}", addr);
 
             let client_id = generate_name();
-            println!("client id [{}]", client_id);
+            tracing::info!("client id [{}]", client_id);
 
             let shared_state = self.shared_state.clone();
 
@@ -85,7 +85,7 @@ impl TcpServer {
                             loop {
                                 let n = stream.read(&mut tmp).await?;
                                 if n == 0 {
-                                    return Err("connection closed before headers".into());
+                                    return Err("Connection closed before headers".into());
                                 }
                                 buffer.extend_from_slice(&tmp[..n]);
                                 if let Some(pos) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
@@ -102,7 +102,6 @@ impl TcpServer {
                             }
 
                             if let Some(len) = headers.get("Content-Length") {
-                                // println!("response case: Content-Length");
                                 let len = len.parse::<usize>()?;
                                 while buffer.len() < header_end + len {
                                     let n = stream.read(&mut tmp).await?;
@@ -123,7 +122,7 @@ impl TcpServer {
                                     // Read more data
                                     let n = stream.read(&mut tmp).await?;
                                     if n == 0 {
-                                        return Err("connection closed before chunked terminator".into());
+                                        return Err("Connection closed before chunked terminator".into());
                                     }
                                     buffer.extend_from_slice(&tmp[..n]);
                                 }
@@ -141,7 +140,7 @@ impl TcpServer {
                             shared_state.send_to_http_client(ticket.name.as_str(), buffer).await;
                         },
                         None => {
-                            println!("TCP client application close: [{}] ", client_id);
+                            tracing::info!("TCP client application close: [{}] ", client_id);
                             shared_state
                                 .unregister_tcp_client(client_id.as_str()).await;
                             break;

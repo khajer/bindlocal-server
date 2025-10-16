@@ -5,12 +5,18 @@ mod shared;
 mod tcp_server;
 
 use http_server::HttpServer;
+
 use shared::SharedState;
 use std::env;
 use tcp_server::TcpServer;
 
+use tracing_subscriber;
+use tracing_subscriber::fmt;
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    fmt().with_target(false).init();
+
     let args: Vec<String> = env::args().collect();
     let http_port = if args.len() > 1 {
         args[1].parse::<u16>().unwrap_or(8080)
@@ -27,9 +33,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http_addr = format!("0.0.0.0:{}", http_port);
     let tcp_addr = format!("0.0.0.0:{}", tcp_port);
 
-    println!("Starting servers...");
-    println!("HTTP Server will run on http://{}", http_addr);
-    println!("TCP Server will run on tcp://{}", tcp_addr);
+    tracing::info!("Starting servers..");
+
+    tracing::info!("HTTP Server will run on http://{}", http_addr);
+    tracing::info!("TCP Server will run on tcp://{}", tcp_addr);
 
     let share_state = SharedState::new();
 
