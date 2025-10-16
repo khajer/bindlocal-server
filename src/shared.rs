@@ -43,7 +43,7 @@ impl SharedState {
                 }
             }
         } else {
-            println!("cannot connect http client id {}", client_id);
+            tracing::error!("cannot connect http client id {}", client_id);
             false
         }
     }
