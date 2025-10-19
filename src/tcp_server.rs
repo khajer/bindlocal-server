@@ -14,6 +14,8 @@ pub struct TcpServer {
     shared_state: SharedState,
 }
 
+const MINIMUM_CLIENT_VERSION: &str = "0.0.2";
+
 impl TcpServer {
     pub async fn new(
         addr: &str,
@@ -31,16 +33,11 @@ impl TcpServer {
             let (socket, addr) = self.listener.accept().await?;
             tracing::info!("New TCP connection from: {}", addr);
 
-            let client_id = generate_name();
-            tracing::info!("client id [{}]", client_id);
-
             let shared_state = self.shared_state.clone();
 
             // Spawn a new task for each TCP connection
             tokio::spawn(async move {
-                if let Err(e) =
-                    Self::handle_tcp_connection(socket, shared_state, client_id.to_string()).await
-                {
+                if let Err(e) = Self::handle_tcp_connection(socket, shared_state).await {
                     eprintln!("Error handling TCP connection: {}", e);
                 }
             });
@@ -50,15 +47,31 @@ impl TcpServer {
     async fn handle_tcp_connection(
         mut stream: TcpStream,
         shared_state: SharedState,
-        client_id: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        // check version available
+        let mut first_access = [0u8; 1024];
+        let n = stream.read(&mut first_access).await?;
+        if n == 0 {
+            return Ok(());
+        }
+
+        let s = String::from_utf8_lossy(&first_access[..n]);
+        if let Some(version) = s.split(" ").nth(1) {
+            if !check_available_version(&version, MINIMUM_CLIENT_VERSION) {
+                let txt_resp = "ERR001:request_higher_version";
+                stream.write_all(txt_resp.as_bytes()).await?;
+                return Ok(());
+            }
+        }
+        let client_id = generate_name();
+        tracing::info!("client id [{}]", client_id);
         let (tx_tcp, mut rx_tcp) = mpsc::unbounded_channel::<TicketRequestHttp>();
         shared_state
             .register_tcp_client(client_id.to_string(), tx_tcp)
             .await;
 
         // Send welcome message
-        let welcome = format!("Connected the Server\nhost: http://{}.connl.io", client_id);
+        let welcome = format!("{}", client_id);
         stream.write_all(welcome.as_bytes()).await?;
 
         loop {
@@ -155,10 +168,34 @@ impl TcpServer {
 
 fn generate_name() -> String {
     let mut rng = rand::rng();
-    let name = format!("app-{}", rng.random_range(0..10000));
+    let name = format!("app-{:04}", rng.random_range(0..10000));
     name
 }
 
+fn parse_version(version_str: &str) -> Option<(u32, u32, u32)> {
+    let parts: Vec<&str> = version_str.split('.').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    match (parts[0].parse(), parts[1].parse(), parts[2].parse()) {
+        (Ok(major), Ok(minor), Ok(patch)) => Some((major, minor, patch)),
+        _ => None,
+    }
+}
+
+/// Checks if the `first_access` version is greater than or equal to the `current_version`.
+fn check_available_version(first_access: &str, current_version: &str) -> bool {
+    let first_parsed = match parse_version(first_access) {
+        Some(v) => v,
+        None => return false,
+    };
+
+    let current_parsed = match parse_version(current_version) {
+        Some(v) => v,
+        None => return false,
+    };
+    first_parsed >= current_parsed
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,5 +204,33 @@ mod tests {
     fn test_generate_name() {
         let result = generate_name();
         assert_eq!(result.len(), 8);
+    }
+
+    #[test]
+    fn test_check_available_version_002() {
+        let first_access = "0.0.2";
+        assert_eq!(check_available_version(first_access, "0.0.2"), true);
+    }
+    #[test]
+    fn test_check_available_version_001() {
+        let first_access = "0.0.1";
+        assert_eq!(check_available_version(first_access, "0.0.2"), false);
+    }
+    #[test]
+    fn test_check_available_version_003() {
+        let first_access = "0.0.3";
+        assert_eq!(check_available_version(first_access, "0.0.2"), true);
+    }
+    #[test]
+    fn test_check_available_version_random_text() {
+        let first_access = "fdsfdsfjds9]nsfdlksjdfl";
+        assert_eq!(check_available_version(first_access, "0.0.2"), false);
+    }
+
+    #[test]
+    fn test_parse_version() {
+        let version_str = "1.2.3";
+        let expected = Some((1, 2, 3));
+        assert_eq!(parse_version(version_str), expected);
     }
 }
