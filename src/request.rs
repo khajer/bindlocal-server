@@ -35,6 +35,18 @@ impl HttpRequest {
         }
         None
     }
+
+    pub fn parse_content_request_format(headers: String) -> String {
+        let line = headers.lines().nth(0);
+        if let Some(value) = line {
+            if let Some(space_index) = value.rfind(" ") {
+                return value[0..space_index].to_string() + " ";
+            }
+
+            return value.to_string();
+        }
+        "".to_string()
+    }
 }
 
 #[cfg(test)]
@@ -91,5 +103,18 @@ mod tests {
         let headers = "xxx:\r\n".to_string();
         let result = HttpRequest::parse_connection(headers);
         assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_parse_content_request_format_normal() {
+        let headers = "GET / HTTP/1.1\r\nHost: test.example.com\r\n\r\n".to_string();
+        let result = HttpRequest::parse_content_request_format(headers);
+        assert_eq!(result, "GET / ");
+    }
+    #[test]
+    fn test_parse_content_request_format_favicon() {
+        let headers = "GET /favicon.ico HTTP/1.1\r\nHost: test.example.com\r\n\r\n".to_string();
+        let result = HttpRequest::parse_content_request_format(headers);
+        assert_eq!(result, "GET /favicon.ico ");
     }
 }

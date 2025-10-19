@@ -1,5 +1,7 @@
 use rand::Rng;
+use std::net::SocketAddr;
 use std::str;
+
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -30,12 +32,12 @@ impl HttpServer {
 
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
-            let (socket, _addr) = self.listener.accept().await?;
+            let (socket, addr) = self.listener.accept().await?;
 
             // Spawn a new task for each connection
             let shared_state = self.shared_state.clone();
             tokio::spawn(async move {
-                if let Err(e) = Self::handle_connection(socket, shared_state).await {
+                if let Err(e) = Self::handle_connection(socket, shared_state, addr).await {
                     eprintln!("Error handling HTTP connection: {}", e);
                 }
             });
@@ -45,8 +47,10 @@ impl HttpServer {
     async fn handle_connection(
         mut stream: TcpStream,
         shared_state: SharedState,
+        addr: SocketAddr,
     ) -> Result<(), Box<dyn std::error::Error>> {
         loop {
+            let mut status_text = format!("{}: ", addr.ip().to_string());
             let mut buf = vec![0u8; 1024]; // Initial capacity
             let mut total_data = Vec::new();
             loop {
@@ -71,6 +75,9 @@ impl HttpServer {
 
             let headers_str = str::from_utf8(&total_data[..headers_end - 4])?.to_string();
             let content_length = HttpRequest::parse_content_length(headers_str.clone());
+
+            let req_txt = HttpRequest::parse_content_request_format(headers_str.clone());
+            status_text += &req_txt;
 
             if let Some(body_length) = content_length {
                 let body_data_received = total_data.len() - headers_end;
@@ -123,9 +130,9 @@ impl HttpServer {
             }
 
             // waiting for response from TCP client
-            wait_for_tcp_response(rx_http, &mut stream).await;
+            wait_for_tcp_response(rx_http, &mut stream, status_text).await;
 
-            if let Some(conn_type) = HttpRequest::parse_connection(headers_str.clone()) {
+            if let Some(conn_type) = HttpRequest::parse_connection(headers_str) {
                 if conn_type == "close" {
                     break;
                 }
@@ -134,28 +141,51 @@ impl HttpServer {
         Ok(())
     }
 }
-async fn wait_for_tcp_response(mut rx_http: UnboundedReceiver<Vec<u8>>, stream: &mut TcpStream) {
+async fn wait_for_tcp_response(
+    mut rx_http: UnboundedReceiver<Vec<u8>>,
+    stream: &mut TcpStream,
+    status_text: String,
+) {
+    let status_resp: String;
     match rx_http.recv().await {
         Some(value) => {
             if !value.is_empty() {
+                let header = value.windows(2).position(|w| w == b"\r\n").unwrap();
+                let header_text = String::from_utf8_lossy(&value[0..header]);
+                status_resp = parse_response_header(header_text.to_string());
                 stream.write_all(&value).await.unwrap();
             } else {
+                status_resp = "404 Not Found".to_string();
                 let response = HttpResponse::not_found().to_string();
                 stream.write_all(response.as_bytes()).await.unwrap();
             }
         }
         None => {
+            status_resp = "".to_string();
             let response = HttpResponse::service_unavailable().to_string();
             stream.write_all(response.as_bytes()).await.unwrap();
         }
     }
     stream.flush().await.unwrap();
+    tracing::info!("{} {}", status_text, status_resp);
 }
 
 fn generate_trx_id() -> String {
     let mut rng = rand::rng();
     let tx_id: u32 = rng.random_range(10000000..100000000); // 8-digit number
     format!("tx-{:x}", tx_id)
+}
+
+fn parse_response_header(headers: String) -> String {
+    if let Some(status_line) = headers.lines().next() {
+        if let Some(space_index) = status_line.find(' ') {
+            status_line[space_index + 1..].to_string()
+        } else {
+            status_line.to_string()
+        }
+    } else {
+        String::new()
+    }
 }
 
 #[cfg(test)]
@@ -166,5 +196,17 @@ mod tests {
     fn test_generate_trx_id() {
         let id = generate_trx_id();
         assert_eq!(id.len(), 10); // 8-digit number + "tx-"
+    }
+    #[test]
+    fn test_response_header() {
+        let headers = "HTTP/1.1 200 OK".to_string();
+        let result = parse_response_header(headers);
+        assert_eq!(result, "200 OK");
+    }
+    #[test]
+    fn test_response_header_more_data() {
+        let headers = "HTTP/1.1 200 OK\r\n testesttst".to_string();
+        let result = parse_response_header(headers);
+        assert_eq!(result, "200 OK");
     }
 }
