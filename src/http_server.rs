@@ -72,6 +72,7 @@ impl HttpServer {
             };
 
             let headers_str = str::from_utf8(&total_data[..headers_end - 4])?.to_string();
+            println!("{headers_str}");
             let content_length = HttpRequest::parse_content_length(headers_str.clone());
             let ip = HttpRequest::parse_x_real_ip(headers_str.clone()).unwrap_or("".to_string());
             let req_txt = HttpRequest::parse_content_request_format(headers_str.clone());
