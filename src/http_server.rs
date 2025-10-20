@@ -1,5 +1,4 @@
 use rand::Rng;
-use std::net::SocketAddr;
 use std::str;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -32,12 +31,12 @@ impl HttpServer {
 
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
-            let (socket, addr) = self.listener.accept().await?;
+            let (socket, _addr) = self.listener.accept().await?;
 
             // Spawn a new task for each connection
             let shared_state = self.shared_state.clone();
             tokio::spawn(async move {
-                if let Err(e) = Self::handle_connection(socket, shared_state, addr).await {
+                if let Err(e) = Self::handle_connection(socket, shared_state).await {
                     eprintln!("Error handling HTTP connection: {}", e);
                 }
             });
@@ -47,10 +46,9 @@ impl HttpServer {
     async fn handle_connection(
         mut stream: TcpStream,
         shared_state: SharedState,
-        addr: SocketAddr,
     ) -> Result<(), Box<dyn std::error::Error>> {
         loop {
-            let mut status_text = format!("{}: ", addr.ip().to_string());
+            let status_text;
             let mut buf = vec![0u8; 1024]; // Initial capacity
             let mut total_data = Vec::new();
             loop {
@@ -75,9 +73,9 @@ impl HttpServer {
 
             let headers_str = str::from_utf8(&total_data[..headers_end - 4])?.to_string();
             let content_length = HttpRequest::parse_content_length(headers_str.clone());
-
+            let ip = HttpRequest::parse_x_real_ip(headers_str.clone()).unwrap_or("".to_string());
             let req_txt = HttpRequest::parse_content_request_format(headers_str.clone());
-            status_text += &req_txt;
+            status_text = format!("{}: {}", ip, &req_txt);
 
             if let Some(body_length) = content_length {
                 let body_data_received = total_data.len() - headers_end;
