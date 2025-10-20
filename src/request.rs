@@ -47,8 +47,17 @@ impl HttpRequest {
         }
         "".to_string()
     }
+    pub fn parse_x_real_ip(headers: String) -> Option<String> {
+        for line in headers.lines() {
+            if line.to_lowercase().starts_with("x-real-ip:") {
+                if let Some(value) = line.split(':').nth(1) {
+                    return Some(value.trim().to_string());
+                }
+            }
+        }
+        None
+    }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -116,5 +125,17 @@ mod tests {
         let headers = "GET /favicon.ico HTTP/1.1\r\nHost: test.example.com\r\n\r\n".to_string();
         let result = HttpRequest::parse_content_request_format(headers);
         assert_eq!(result, "GET /favicon.ico ");
+    }
+    #[test]
+    fn test_parse_x_real_ip() {
+        let headers = "X-Real-IP: 192.168.1.1\r\n".to_string();
+        let result = HttpRequest::parse_x_real_ip(headers);
+        assert_eq!(result, Some("192.168.1.1".to_string()));
+    }
+    #[test]
+    fn test_parse_x_real_ip_empty() {
+        let headers = "X-Real-IP:\r\n".to_string();
+        let result = HttpRequest::parse_x_real_ip(headers);
+        assert_eq!(result, None);
     }
 }
