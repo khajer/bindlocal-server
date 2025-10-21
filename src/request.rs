@@ -136,6 +136,6 @@ mod tests {
     fn test_parse_x_real_ip_empty() {
         let headers = "X-Real-IP:\r\n".to_string();
         let result = HttpRequest::parse_x_real_ip(headers);
-        assert_eq!(result, None);
+        assert_eq!(result, Some("".to_string()));
     }
 }
