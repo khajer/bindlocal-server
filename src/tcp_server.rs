@@ -46,7 +46,7 @@ impl TcpServer {
 
     async fn handle_tcp_connection(
         mut stream: TcpStream,
-        shared_state: SharedState,
+        mut shared_state: SharedState,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // check version available
         let mut first_access = [0u8; 1024];
@@ -55,15 +55,28 @@ impl TcpServer {
             return Ok(());
         }
 
-        let s = String::from_utf8_lossy(&first_access[..n]);
-        if let Some(version) = s.split(" ").nth(1) {
+        let incoming_message = String::from_utf8_lossy(&first_access[..n]);
+        if let Some(version) = incoming_message.split(" ").nth(1) {
             if !check_available_version(&version, MINIMUM_CLIENT_VERSION) {
                 let txt_resp = "ERR001:request_higher_version";
                 stream.write_all(txt_resp.as_bytes()).await?;
                 return Ok(());
             }
         }
-        let client_id = generate_name();
+        let mut client_id;
+        if let Some(sub_domain_name) = incoming_message.split(" ").nth(2) {
+            client_id = sub_domain_name.to_string();
+            let mut cnt = 1;
+            while shared_state.check_duplicate_subdomain(client_id.clone()) {
+                client_id = format!("{}-{}", client_id, cnt);
+                cnt += 1;
+            }
+        } else {
+            client_id = generate_name();
+            while shared_state.check_duplicate_subdomain(client_id.clone()) {
+                client_id = generate_name();
+            }
+        }
         tracing::info!("client id [{}]", client_id);
         let (tx_tcp, mut rx_tcp) = mpsc::unbounded_channel::<TicketRequestHttp>();
         shared_state
@@ -196,6 +209,7 @@ fn check_available_version(first_access: &str, current_version: &str) -> bool {
     };
     first_parsed >= current_parsed
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
