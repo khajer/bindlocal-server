@@ -100,9 +100,6 @@ mod tests {
 
     #[test]
     fn test_server_config_default_ports() {
-        // Test default configuration
-        // This would require mocking command line args in a real implementation
-        // For now, we verify the structure is correct
         let config = ServerConfig {
             http_port: 8080,
             tcp_port: 9090,

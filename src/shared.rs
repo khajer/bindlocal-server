@@ -12,6 +12,7 @@ pub struct TicketRequestHttp {
 pub struct SharedState {
     pub tcp_connections: Arc<Mutex<HashMap<String, mpsc::UnboundedSender<TicketRequestHttp>>>>,
     pub http_connections: Arc<Mutex<HashMap<String, mpsc::UnboundedSender<Vec<u8>>>>>,
+    pub subdomains: Vec<String>,
 }
 
 impl SharedState {
@@ -19,6 +20,7 @@ impl SharedState {
         let state = SharedState {
             tcp_connections: Arc::new(Mutex::new(HashMap::new())),
             http_connections: Arc::new(Mutex::new(HashMap::new())),
+            subdomains: Vec::new(),
         };
         state
     }
@@ -69,5 +71,35 @@ impl SharedState {
         let mut connections = self.http_connections.lock().await;
 
         connections.insert(client_id, tx);
+    }
+    pub fn check_duplicate_subdomain(&mut self, subdomain: String) -> bool {
+        let dup = self.subdomains.contains(&subdomain);
+        if dup == false {
+            self.subdomains.push(subdomain);
+
+            false
+        } else {
+            true
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_check_duplicate_subdomain() {
+        let mut shared_state = SharedState::new();
+        let subdomain = "example";
+
+        assert_eq!(
+            shared_state.check_duplicate_subdomain(subdomain.to_string()),
+            false
+        );
+        assert_eq!(
+            shared_state.check_duplicate_subdomain(subdomain.to_string()),
+            true
+        );
     }
 }
