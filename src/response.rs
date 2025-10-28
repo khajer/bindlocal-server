@@ -51,6 +51,25 @@ impl HttpResponse {
         Self::new(404, "Not Found", "text/html", body)
     }
 
+    pub fn connection_refused() -> Self {
+        let body = r#"<!DOCTYPE html>
+<html>
+<head>
+    <title>503 Service Unavailable</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; text-align: center; }
+        h1 { color: #d32f2f; }
+    </style>
+</head>
+<body>
+    <h1>503 Service Unavailable</h1>
+    <p>The requested can't be reached ERR_CONNECTION_REFUSED </p>
+    <a href="/">← Back to home</a>
+</body>
+</html>"#;
+        Self::new(503, "Service Unavailable", "text/html", body)
+    }
+
     pub fn to_string(&self) -> String {
         format!(
             "HTTP/1.1 {} {}\r\n\
