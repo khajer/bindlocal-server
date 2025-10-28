@@ -92,7 +92,6 @@ impl TcpServer {
                 msg = rx_tcp.recv() => {
                     match msg {
                         Some(ticket) => {
-
                             let message = ticket.data;
                             if let Err(e) = stream.write_all(&message).await {
                                 eprintln!("Error sending direct message to TCP client {}: {}", client_id, e);
@@ -120,6 +119,7 @@ impl TcpServer {
                                 }
                             }
                             let header_text = String::from_utf8_lossy(&buffer[..header_end]);
+
                             let mut headers = HashMap::new();
                             for line in header_text.lines().skip(1) {
                                 if let Some((k, v)) = line.split_once(": ") {
@@ -161,6 +161,8 @@ impl TcpServer {
                                     buffer.truncate(end_pos);
                                 }
                             } else {
+                                // case error
+                                // println!("Error: ERROR CASE");
                                 // case return only header for example: 304, 201
                             }
                             shared_state.send_to_http_client(ticket.name.as_str(), buffer).await;

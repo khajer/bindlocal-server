@@ -151,7 +151,12 @@ async fn wait_for_tcp_response(
                 let header = value.windows(2).position(|w| w == b"\r\n").unwrap();
                 let header_text = String::from_utf8_lossy(&value[0..header]);
                 status_resp = parse_response_header(header_text.to_string());
-                stream.write_all(&value).await.unwrap();
+
+                if let Some(v) = check_client_app_error(status_resp.clone()) {
+                    stream.write_all(&v).await.unwrap();
+                } else {
+                    stream.write_all(&value).await.unwrap();
+                }
             } else {
                 status_resp = "404 Not Found".to_string();
                 let response = HttpResponse::not_found().to_string();
@@ -171,7 +176,7 @@ async fn wait_for_tcp_response(
 fn generate_trx_id() -> String {
     let mut rng = rand::rng();
     let tx_id: u32 = rng.random_range(10000000..100000000); // 8-digit number
-    format!("tx-{:x}", tx_id)
+    format!("tx-{:8}", tx_id)
 }
 
 fn parse_response_header(headers: String) -> String {
@@ -186,6 +191,15 @@ fn parse_response_header(headers: String) -> String {
     }
 }
 
+fn check_client_app_error(status_resp: String) -> Option<Vec<u8>> {
+    if status_resp.to_lowercase().contains("client_error") {
+        let resp_error = HttpResponse::connection_refused().to_string();
+        Some(resp_error.as_bytes().to_vec())
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,7 +207,7 @@ mod tests {
     #[test]
     fn test_generate_trx_id() {
         let id = generate_trx_id();
-        assert_eq!(id.len(), 10); // 8-digit number + "tx-"
+        assert_eq!(id.len(), 11); // 8-digit number + "tx-"
     }
     #[test]
     fn test_response_header() {
@@ -206,5 +220,18 @@ mod tests {
         let headers = "HTTP/1.1 200 OK\r\n testesttst".to_string();
         let result = parse_response_header(headers);
         assert_eq!(result, "200 OK");
+    }
+
+    #[test]
+    fn test_check_client_app_error() {
+        let error_status = "CLIENT_ERROR:ERR_CONNECTION_REFUSED".to_string();
+        let result = check_client_app_error(error_status);
+        assert!(result.is_some());
+    }
+    #[test]
+    fn test_check_client_app_error_by_http() {
+        let error_status = "HTTP/1.1 500 Internal Server Error".to_string();
+        let result = check_client_app_error(error_status);
+        assert!(result.is_none());
     }
 }
