@@ -151,7 +151,6 @@ async fn wait_for_tcp_response(
                 let header = value.windows(2).position(|w| w == b"\r\n").unwrap();
                 let header_text = String::from_utf8_lossy(&value[0..header]);
                 status_resp = parse_response_header(header_text.to_string());
-                // stream.write_all(&value).await.unwrap();
 
                 if let Some(v) = check_client_app_error(status_resp.clone()) {
                     stream.write_all(&v).await.unwrap();
