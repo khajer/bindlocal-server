@@ -193,7 +193,7 @@ fn parse_response_header(headers: String) -> String {
 
 fn check_client_app_error(status_resp: String) -> Option<Vec<u8>> {
     if status_resp.to_lowercase().contains("client_error") {
-        let resp_error = HttpResponse::connection_refused().to_string();
+        let resp_error = HttpResponse::client_app_call_local_refused().to_string();
         Some(resp_error.as_bytes().to_vec())
     } else {
         None
