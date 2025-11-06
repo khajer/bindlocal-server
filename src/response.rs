@@ -15,18 +15,6 @@ impl HttpResponse {
         }
     }
 
-    // pub fn ok_html(body: &str) -> Self {
-    //     Self::new(200, "OK", "text/html", body)
-    // }
-
-    // pub fn ok_text(body: &str) -> Self {
-    //     Self::new(200, "OK", "text/plain", body)
-    // }
-
-    // pub fn ok_json(body: &str) -> Self {
-    //     Self::new(200, "OK", "application/json", body)
-    // }
-
     pub fn service_unavailable() -> Self {
         let body = "service unavailable";
         Self::new(503, "error", "text/plain", body)
@@ -51,11 +39,11 @@ impl HttpResponse {
         Self::new(404, "Not Found", "text/html", body)
     }
 
-    pub fn connection_refused() -> Self {
+    pub fn client_app_call_local_refused() -> Self {
         let body = r#"<!DOCTYPE html>
 <html>
 <head>
-    <title>503 Service Unavailable</title>
+    <title>503 Service Unavailable , The Client Application Cannot Connect to the Local Server</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; text-align: center; }
         h1 { color: #d32f2f; }
@@ -63,7 +51,7 @@ impl HttpResponse {
 </head>
 <body>
     <h1>503 Service Unavailable</h1>
-    <p>The requested can't be reached ERR_CONNECTION_REFUSED </p>
+    <p>The Client Application Cannot Connect to the Local Server</p>
     <a href="/">← Back to home</a>
 </body>
 </html>"#;
