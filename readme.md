@@ -105,3 +105,6 @@ The server configuration includes:
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Contact Me
+- [khajer@gmail.com](mailto:khajer@gmail.com)
