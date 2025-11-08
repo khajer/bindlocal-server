@@ -25,9 +25,10 @@ impl HttpRequest {
         }
         None
     }
-    pub fn parse_connection(headers: String) -> Option<String> {
+
+    pub fn parse_check_value_header(headers: String, key: &str) -> Option<String> {
         for line in headers.lines() {
-            if line.to_lowercase().starts_with("connection:") {
+            if line.to_lowercase().starts_with(key.to_lowercase().as_str()) {
                 if let Some(value) = line.split(':').nth(1) {
                     return Some(value.trim().to_string());
                 }
@@ -46,16 +47,6 @@ impl HttpRequest {
             return value.to_string();
         }
         "".to_string()
-    }
-    pub fn parse_x_real_ip(headers: String) -> Option<String> {
-        for line in headers.lines() {
-            if line.to_lowercase().starts_with("x-real-ip:") {
-                if let Some(value) = line.split(':').nth(1) {
-                    return Some(value.trim().to_string());
-                }
-            }
-        }
-        None
     }
 }
 #[cfg(test)]
@@ -104,13 +95,13 @@ mod tests {
     #[test]
     fn test_parse_connection() {
         let headers = "Connection: keep-alive\r\n".to_string();
-        let result = HttpRequest::parse_connection(headers);
+        let result = HttpRequest::parse_check_value_header(headers, "connection");
         assert_eq!(result, Some("keep-alive".to_string()));
     }
     #[test]
     fn test_parse_connection_empty() {
         let headers = "xxx:\r\n".to_string();
-        let result = HttpRequest::parse_connection(headers);
+        let result = HttpRequest::parse_check_value_header(headers, "connection");
         assert_eq!(result, None);
     }
 
@@ -129,13 +120,13 @@ mod tests {
     #[test]
     fn test_parse_x_real_ip() {
         let headers = "X-Real-IP: 192.168.1.1\r\n".to_string();
-        let result = HttpRequest::parse_x_real_ip(headers);
+        let result = HttpRequest::parse_check_value_header(headers, "X-Real-IP");
         assert_eq!(result, Some("192.168.1.1".to_string()));
     }
     #[test]
     fn test_parse_x_real_ip_empty() {
         let headers = "X-Real-IP:\r\n".to_string();
-        let result = HttpRequest::parse_x_real_ip(headers);
+        let result = HttpRequest::parse_check_value_header(headers, "x-real-ip");
         assert_eq!(result, Some("".to_string()));
     }
 }

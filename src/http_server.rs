@@ -73,7 +73,8 @@ impl HttpServer {
 
             let headers_str = str::from_utf8(&total_data[..headers_end - 4])?.to_string();
             let content_length = HttpRequest::parse_content_length(headers_str.clone());
-            let ip = HttpRequest::parse_x_real_ip(headers_str.clone()).unwrap_or("".to_string());
+            let ip = HttpRequest::parse_check_value_header(headers_str.clone(), "X-Real-IP")
+                .unwrap_or("".to_string());
             let req_txt = HttpRequest::parse_content_request_format(headers_str.clone());
             status_text = format!("{}: {}", ip, &req_txt);
 
@@ -130,7 +131,9 @@ impl HttpServer {
             // waiting for response from TCP client
             wait_for_tcp_response(rx_http, &mut stream, status_text).await;
 
-            if let Some(conn_type) = HttpRequest::parse_connection(headers_str) {
+            if let Some(conn_type) =
+                HttpRequest::parse_check_value_header(headers_str, "Connection")
+            {
                 if conn_type == "close" {
                     break;
                 }
