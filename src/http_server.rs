@@ -108,7 +108,7 @@ impl HttpServer {
                 return Ok(());
             }
 
-            let trx_id = generate_trx_id();
+            let trx_id = generate_trx_id(client_id.to_string());
 
             let ticket = TicketRequestHttp {
                 name: format!("{trx_id}"),
@@ -176,10 +176,10 @@ async fn wait_for_tcp_response(
     tracing::info!("{} {}", status_text, status_resp);
 }
 
-fn generate_trx_id() -> String {
+fn generate_trx_id(client_id: String) -> String {
     let mut rng = rand::rng();
-    let tx_id: u32 = rng.random_range(10000000..100000000); // 8-digit number
-    format!("tx-{:8}", tx_id)
+    let tx_id: u32 = rng.random_range(1000..10000); // 8-digit number
+    format!("{}_tx-{:4}", client_id, tx_id)
 }
 
 fn parse_response_header(headers: String) -> String {
@@ -209,8 +209,10 @@ mod tests {
 
     #[test]
     fn test_generate_trx_id() {
-        let id = generate_trx_id();
-        assert_eq!(id.len(), 11); // 8-digit number + "tx-"
+        let client_id = "300".to_string();
+        let id = generate_trx_id(client_id);
+        println!("{id}");
+        assert_eq!(id.len(), 11); //client_tx-random(4)
     }
     #[test]
     fn test_response_header() {
