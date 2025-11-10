@@ -1,198 +1,130 @@
-use axum::{
-    Router,
-    extract::{
-        Query, State,
-        ws::{Message, WebSocket, WebSocketUpgrade},
-    },
-    http::StatusCode,
-    response::{IntoResponse, Json, Response},
-    routing::get,
-};
-use futures_util::{SinkExt, StreamExt};
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
-};
-use tokio::sync::{RwLock, broadcast};
+mod http_server;
+mod request;
+mod response;
+mod shared;
+mod tcp_server;
 
-// Query parameters for the GET endpoint
-#[derive(Debug, Deserialize)]
-pub struct SendMessage {
-    pub msg: String,
-}
+use http_server::HttpServer;
+use shared::SharedState;
+use std::env;
+use tcp_server::TcpServer;
+use tracing::info;
+use tracing_subscriber::fmt;
 
-// WebSocket client info
 #[derive(Debug, Clone)]
-struct Client {
-    id: u64,
-    addr: SocketAddr,
+pub struct ServerConfig {
+    pub http_port: u16,
+    pub tcp_port: u16,
+    pub http_addr: String,
+    pub tcp_addr: String,
 }
 
-// Shared state
-#[derive(Debug)]
-pub struct AppState {
-    clients: RwLock<HashMap<u64, Client>>,
-    tx: broadcast::Sender<String>, // Simple string broadcast
-    next_id: AtomicU64,
+impl ServerConfig {
+    pub fn from_args() -> Result<Self, Box<dyn std::error::Error>> {
+        let args: Vec<String> = env::args().collect();
+
+        let http_port = if args.len() > 1 {
+            args[1]
+                .parse::<u16>()
+                .map_err(|_| format!("Invalid HTTP port: {}", args[1]))?
+        } else {
+            8080
+        };
+
+        let tcp_port = if args.len() > 2 {
+            args[2]
+                .parse::<u16>()
+                .map_err(|_| format!("Invalid TCP port: {}", args[2]))?
+        } else {
+            9090
+        };
+
+        Ok(ServerConfig {
+            http_addr: format!("0.0.0.0:{}", http_port),
+            tcp_addr: format!("0.0.0.0:{}", tcp_port),
+            http_port,
+            tcp_port,
+        })
+    }
 }
 
-impl AppState {
-    fn new() -> Self {
-        let (tx, _rx) = broadcast::channel(100);
-        Self {
-            clients: RwLock::new(HashMap::new()),
-            tx,
-            next_id: AtomicU64::new(1),
-        }
-    }
+fn setup_logging() {
+    fmt()
+        .with_target(false)
+        .with_max_level(tracing::Level::INFO)
+        .init();
+}
 
-    async fn add_client(&self, addr: SocketAddr) -> u64 {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let client = Client { id, addr };
-        self.clients.write().await.insert(id, client);
-        println!("✅ Client {} connected", id);
-        id
-    }
+fn print_startup_info(config: &ServerConfig) {
+    info!("Starting servers..");
+    info!("HTTP Server will run on http://{}", config.http_addr);
+    info!("TCP Server will run on tcp://{}", config.tcp_addr);
+}
 
-    async fn remove_client(&self, id: u64) {
-        self.clients.write().await.remove(&id);
-        println!("🔌 Client {} disconnected", id);
-    }
+async fn initialize_servers(
+    config: &ServerConfig,
+    shared_state: SharedState,
+) -> Result<(HttpServer, TcpServer), Box<dyn std::error::Error>> {
+    let http_server = HttpServer::new(&config.http_addr, shared_state.clone()).await?;
+    let tcp_server = TcpServer::new(&config.tcp_addr, shared_state.clone()).await?;
 
-    async fn client_count(&self) -> usize {
-        self.clients.read().await.len()
-    }
+    Ok((http_server, tcp_server))
+}
 
-    // Broadcast message to all WebSocket clients
-    fn broadcast(&self, message: String) -> Result<usize, broadcast::error::SendError<String>> {
-        self.tx.send(message)
-    }
+async fn run_servers(
+    http_server: HttpServer,
+    tcp_server: TcpServer,
+) -> Result<(), Box<dyn std::error::Error>> {
+    tokio::try_join!(http_server.run(), tcp_server.run())?;
+    Ok(())
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let app_state = Arc::new(AppState::new());
+    let config = ServerConfig::from_args()?;
+    setup_logging();
+    print_startup_info(&config);
 
-    let app = Router::new()
-        .route("/ws", get(ws_handler))
-        .route("/send", get(send_message_handler)) // GET /send?msg=aaa
-        .with_state(app_state);
+    let shared_state = SharedState::new();
 
-    let addr = "127.0.0.1:3000";
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let (http_server, tcp_server) = initialize_servers(&config, shared_state).await?;
 
-    println!("🚀 Simple GET to WebSocket Broadcast Server");
-    println!("📡 Server: http://{}", addr);
-    println!("🔌 WebSocket: ws://{}/ws", addr);
-    println!("📤 Send message: GET http://{}/send?msg=your_message", addr);
-    println!();
-
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .await?;
+    run_servers(http_server, tcp_server).await?;
 
     Ok(())
 }
 
-// WebSocket handler
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<Arc<AppState>>,
-    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<SocketAddr>,
-) -> Response {
-    ws.on_upgrade(move |socket| handle_websocket(socket, state, addr))
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-async fn handle_websocket(socket: WebSocket, state: Arc<AppState>, addr: SocketAddr) {
-    let client_id = state.add_client(addr).await;
-    let (mut sender, mut receiver) = socket.split();
-    let mut rx = state.tx.subscribe();
+    #[test]
+    fn test_server_config_default_ports() {
+        let config = ServerConfig {
+            http_port: 8080,
+            tcp_port: 9090,
+            http_addr: "0.0.0.0:8080".to_string(),
+            tcp_addr: "0.0.0.0:9090".to_string(),
+        };
 
-    // Send welcome message
-    let welcome = format!(
-        "Welcome! Client ID: {}. Connected clients: {}",
-        client_id,
-        state.client_count().await
-    );
-    let _ = sender.send(Message::Text(welcome)).await;
-
-    // Task to handle broadcasts from GET endpoint
-    let broadcast_task = tokio::spawn(async move {
-        while let Ok(message) = rx.recv().await {
-            // Send the broadcasted message to this WebSocket client
-            if sender.send(Message::Text(message)).await.is_err() {
-                break;
-            }
-        }
-    });
-
-    // Task to handle incoming WebSocket messages (optional)
-    let message_task = tokio::spawn(async move {
-        while let Some(msg) = receiver.next().await {
-            if let Ok(Message::Text(text)) = msg {
-                println!("📨 Client {} sent: {}", client_id, text);
-                // You could broadcast WebSocket messages too if needed
-                // let _ = state.broadcast(format!("Client {}: {}", client_id, text));
-            } else if let Ok(Message::Close(_)) = msg {
-                break;
-            }
-        }
-    });
-
-    // Wait for either task to complete
-    tokio::select! {
-        _ = broadcast_task => {},
-        _ = message_task => {},
+        assert_eq!(config.http_port, 8080);
+        assert_eq!(config.tcp_port, 9090);
+        assert_eq!(config.http_addr, "0.0.0.0:8080");
+        assert_eq!(config.tcp_addr, "0.0.0.0:9090");
     }
 
-    // Cleanup when client disconnects
-    state.remove_client(client_id).await;
-}
+    #[test]
+    fn test_server_config_custom_ports() {
+        let config = ServerConfig {
+            http_port: 3000,
+            tcp_port: 4000,
+            http_addr: "0.0.0.0:3000".to_string(),
+            tcp_addr: "0.0.0.0:4000".to_string(),
+        };
 
-// GET endpoint: /send?msg=aaa
-async fn send_message_handler(
-    State(state): State<Arc<AppState>>,
-    Query(params): Query<SendMessage>,
-) -> impl IntoResponse {
-    let message = params.msg;
-    println!("📤 GET /send called with message: '{}'", message);
-
-    // Broadcast the message to all WebSocket clients
-    match state.broadcast(message.clone()) {
-        Ok(receiver_count) => {
-            println!(
-                "✅ Message '{}' broadcasted to {} clients",
-                message, receiver_count
-            );
-
-            (
-                StatusCode::OK,
-                Json(serde_json::json!({
-                    "success": true,
-                    "message": message,
-                    "broadcasted_to": receiver_count,
-                    "connected_clients": state.client_count().await
-                })),
-            )
-        }
-        Err(e) => {
-            println!("❌ Failed to broadcast message: {}", e);
-
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "success": false,
-                    "error": "Failed to broadcast message",
-                    "connected_clients": state.client_count().await
-                })),
-            )
-        }
+        assert_eq!(config.http_port, 3000);
+        assert_eq!(config.tcp_port, 4000);
+        assert_eq!(config.http_addr, "0.0.0.0:3000");
+        assert_eq!(config.tcp_addr, "0.0.0.0:4000");
     }
 }
