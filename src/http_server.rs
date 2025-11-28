@@ -49,19 +49,8 @@ impl HttpServer {
     ) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             let status_text;
-            let mut buf = vec![0u8; 1024]; // Initial capacity
-            let mut total_data = Vec::new();
-            loop {
-                let n = stream.read(&mut buf).await?;
-                if n == 0 {
-                    break; // EOF
-                }
-                total_data.extend_from_slice(&buf[..n]);
 
-                if total_data.windows(4).any(|w| w == b"\r\n\r\n") {
-                    break;
-                }
-            }
+            let mut total_data = get_rawdata_delimiter(&mut stream).await.unwrap();
 
             let header = total_data.windows(4).position(|w| w == b"\r\n\r\n");
             let headers_end = match header {
@@ -201,6 +190,23 @@ fn check_client_app_error(status_resp: String) -> Option<Vec<u8>> {
     } else {
         None
     }
+}
+
+async fn get_rawdata_delimiter(stream: &mut TcpStream) -> Option<Vec<u8>> {
+    let mut buf = vec![0u8; 1024]; // Initial capacity
+    let mut total_data: Vec<u8> = Vec::new();
+    loop {
+        let n = stream.read(&mut buf).await.unwrap();
+        if n == 0 {
+            break; // EOF
+        }
+        total_data.extend_from_slice(&buf[..n]);
+
+        if total_data.windows(4).any(|w| w == b"\r\n\r\n") {
+            break;
+        }
+    }
+    Some(total_data)
 }
 
 #[cfg(test)]
