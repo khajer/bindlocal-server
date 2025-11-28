@@ -92,16 +92,7 @@ impl TcpServer {
                 msg = rx_tcp.recv() => {
                     match msg {
                         Some(ticket) => {
-                            let ticket_name = ticket.name.clone();
-                            match process_ticket(ticket, &mut stream, &client_id).await{
-                                Ok(buffer) => {
-                                    shared_state.send_to_http_client(&ticket_name, buffer).await;
-                                }
-                                Err(e) => {
-                                    eprintln!("Error processing ticket: {}", e);
-                                    shared_state.send_to_http_client(&ticket_name, vec![]).await;
-                                }
-                            }
+                            process_ticket(ticket, &mut stream, &client_id, &mut shared_state).await;
                         },
                         None => {
                             tracing::info!("TCP client application close: [{}] ", client_id);
@@ -121,17 +112,20 @@ async fn process_ticket(
     ticket: TicketRequestHttp,
     stream: &mut TcpStream,
     client_id: &str,
-) -> Result<Vec<u8>, String> {
+    shared_state: &mut SharedState,
+) {
     let message = ticket.data;
     if let Err(e) = stream.write_all(&message).await {
-        return Err(format!(
+        eprintln!(
             "Error sending direct message to TCP client {}: {}",
             client_id, e
-        ));
+        );
+        shared_state.send_to_http_client(&ticket.name, vec![]).await;
     }
 
     if let Err(e) = stream.flush().await {
-        return Err(format!("Error flushing TCP stream: {}", e));
+        eprintln!("Error flushing TCP stream: {}", e);
+        shared_state.send_to_http_client(&ticket.name, vec![]).await;
     }
 
     let mut buffer: Vec<u8> = Vec::new();
@@ -140,7 +134,7 @@ async fn process_ticket(
     loop {
         let n = stream.read(&mut tmp).await.unwrap();
         if n == 0 {
-            return Err("Connection closed before headers".to_string());
+            eprintln!("Connection closed before headers");
         }
         buffer.extend_from_slice(&tmp[..n]);
         if let Some(pos) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
@@ -178,7 +172,7 @@ async fn process_ticket(
             // Read more data
             let n = stream.read(&mut tmp).await.unwrap();
             if n == 0 {
-                return Err("Connection closed before chunked terminator".into());
+                eprintln!("Connection closed before chunked terminator");
             }
             buffer.extend_from_slice(&tmp[..n]);
         }
@@ -195,7 +189,9 @@ async fn process_ticket(
         // println!("Error: ERROR CASE");
         // case return only header for example: 304, 201
     }
-    Ok(buffer)
+    shared_state
+        .send_to_http_client(ticket.name.as_str(), buffer)
+        .await;
 }
 
 fn generate_name() -> String {
