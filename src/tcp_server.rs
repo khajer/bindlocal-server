@@ -92,80 +92,7 @@ impl TcpServer {
                 msg = rx_tcp.recv() => {
                     match msg {
                         Some(ticket) => {
-                            let message = ticket.data;
-                            if let Err(e) = stream.write_all(&message).await {
-                                eprintln!("Error sending direct message to TCP client {}: {}", client_id, e);
-                                shared_state.send_to_http_client(client_id.as_str(), vec![]).await;
-                                break;
-                            }
-                            if let Err(e) = stream.flush().await {
-                                eprintln!("Error flushing TCP stream: {}", e);
-                                shared_state.send_to_http_client(client_id.as_str(), vec![]).await;
-                                break;
-                            }
-
-                            let mut buffer = Vec::new();
-                            let mut tmp = [0u8; 1024];
-                            let header_end;
-                            loop {
-                                let n = stream.read(&mut tmp).await?;
-                                if n == 0 {
-                                    return Err("Connection closed before headers".into());
-                                }
-                                buffer.extend_from_slice(&tmp[..n]);
-                                if let Some(pos) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
-                                    header_end = pos + 4;
-                                    break;
-                                }
-                            }
-                            let header_text = String::from_utf8_lossy(&buffer[..header_end]);
-
-                            let mut headers = HashMap::new();
-                            for line in header_text.lines().skip(1) {
-                                if let Some((k, v)) = line.split_once(": ") {
-                                    headers.insert(k.to_string(), v.to_string());
-                                }
-                            }
-
-                            if let Some(len) = headers.get("Content-Length") {
-                                let len = len.parse::<usize>()?;
-                                while buffer.len() < header_end + len {
-                                    let n = stream.read(&mut tmp).await?;
-                                    if n == 0 {
-                                        break;
-                                    }
-                                    buffer.extend_from_slice(&tmp[..n]);
-                                }
-                            } else if headers
-                                .get("Transfer-Encoding")
-                                .map(|v| v.to_ascii_lowercase())
-                                == Some("chunked".into())
-                            {
-                                loop {
-                                    if buffer[header_end..].windows(5).any(|w| w == b"0\r\n\r\n") {
-                                        break;
-                                    }
-                                    // Read more data
-                                    let n = stream.read(&mut tmp).await?;
-                                    if n == 0 {
-                                        return Err("Connection closed before chunked terminator".into());
-                                    }
-                                    buffer.extend_from_slice(&tmp[..n]);
-                                }
-
-                                if let Some(terminator_pos) = buffer[header_end..]
-                                    .windows(5)
-                                    .position(|w| w == b"0\r\n\r\n")
-                                {
-                                    let end_pos = header_end + terminator_pos + 5; // Include the terminator
-                                    buffer.truncate(end_pos);
-                                }
-                            } else {
-                                // case error
-                                // println!("Error: ERROR CASE");
-                                // case return only header for example: 304, 201
-                            }
-                            shared_state.send_to_http_client(ticket.name.as_str(), buffer).await;
+                            process_ticket(ticket, &mut stream, &client_id, &mut shared_state).await;
                         },
                         None => {
                             tracing::info!("TCP client application close: [{}] ", client_id);
@@ -179,6 +106,92 @@ impl TcpServer {
         }
         Ok(())
     }
+}
+
+async fn process_ticket(
+    ticket: TicketRequestHttp,
+    stream: &mut TcpStream,
+    client_id: &str,
+    shared_state: &mut SharedState,
+) {
+    let message = ticket.data;
+    if let Err(e) = stream.write_all(&message).await {
+        eprintln!(
+            "Error sending direct message to TCP client {}: {}",
+            client_id, e
+        );
+        shared_state.send_to_http_client(&ticket.name, vec![]).await;
+    }
+
+    if let Err(e) = stream.flush().await {
+        eprintln!("Error flushing TCP stream: {}", e);
+        shared_state.send_to_http_client(&ticket.name, vec![]).await;
+    }
+
+    let mut buffer: Vec<u8> = Vec::new();
+    let mut tmp = [0u8; 1024];
+    let header_end;
+    loop {
+        let n = stream.read(&mut tmp).await.unwrap();
+        if n == 0 {
+            eprintln!("Connection closed before headers");
+        }
+        buffer.extend_from_slice(&tmp[..n]);
+        if let Some(pos) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
+            header_end = pos + 4;
+            break;
+        }
+    }
+    let header_text = String::from_utf8_lossy(&buffer[..header_end]);
+
+    let mut headers = HashMap::new();
+    for line in header_text.lines().skip(1) {
+        if let Some((k, v)) = line.split_once(": ") {
+            headers.insert(k.to_string(), v.to_string());
+        }
+    }
+
+    if let Some(len) = headers.get("Content-Length") {
+        let len = len.parse::<usize>().unwrap();
+        while buffer.len() < header_end + len {
+            let n = stream.read(&mut tmp).await.unwrap();
+            if n == 0 {
+                break;
+            }
+            buffer.extend_from_slice(&tmp[..n]);
+        }
+    } else if headers
+        .get("Transfer-Encoding")
+        .map(|v| v.to_ascii_lowercase())
+        == Some("chunked".into())
+    {
+        loop {
+            if buffer[header_end..].windows(5).any(|w| w == b"0\r\n\r\n") {
+                break;
+            }
+            // Read more data
+            let n = stream.read(&mut tmp).await.unwrap();
+            if n == 0 {
+                eprintln!("Connection closed before chunked terminator");
+            }
+            buffer.extend_from_slice(&tmp[..n]);
+        }
+
+        if let Some(terminator_pos) = buffer[header_end..]
+            .windows(5)
+            .position(|w| w == b"0\r\n\r\n")
+        {
+            let end_pos = header_end + terminator_pos + 5; // Include the terminator
+            buffer.truncate(end_pos);
+        }
+    } else {
+        // case error
+        // println!("Error: ERROR CASE");
+        // case return only header for example: 304, 201
+    }
+    shared_state
+        .send_to_http_client(ticket.name.as_str(), buffer)
+        .await;
 }
 
 fn generate_name() -> String {
