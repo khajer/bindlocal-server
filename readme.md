@@ -92,8 +92,8 @@ The server configuration includes:
 
 - [✅] React application testing
 - [✅] Svelte application testing
-- [🔄] WebSocket support
-- [🔄] HTTPS/SSL termination
+- [✅] WebSocket support
+- [✅] HTTPS/SSL termination
 - [🔄] Load balancing
 - [🔄] Rate limiting
 
