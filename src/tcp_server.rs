@@ -49,7 +49,7 @@ impl TcpServer {
         mut shared_state: SharedState,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // check version available
-        let mut first_access = [0u8; 1024];
+        let mut first_access = [0u8; 4096];
         let n = stream.read(&mut first_access).await?;
         if n == 0 {
             return Ok(());
@@ -129,7 +129,7 @@ async fn process_ticket(
     }
 
     let mut buffer: Vec<u8> = Vec::new();
-    let mut tmp = [0u8; 1024];
+    let mut tmp = [0u8; 4096];
     let header_end;
     loop {
         let n = stream.read(&mut tmp).await.unwrap();
