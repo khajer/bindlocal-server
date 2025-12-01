@@ -193,7 +193,7 @@ fn check_client_app_error(status_resp: String) -> Option<Vec<u8>> {
 }
 
 async fn get_rawdata_delimiter(stream: &mut TcpStream) -> Option<Vec<u8>> {
-    let mut buf = vec![0u8; 1024]; // Initial capacity
+    let mut buf = vec![0u8; 4096]; // Initial capacity
     let mut total_data: Vec<u8> = Vec::new();
     loop {
         let n = stream.read(&mut buf).await.unwrap();
