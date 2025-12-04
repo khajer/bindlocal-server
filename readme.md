@@ -94,8 +94,6 @@ The server configuration includes:
 - [✅] Svelte application testing
 - [✅] WebSocket support
 - [✅] HTTPS/SSL termination
-- [🔄] Load balancing
-- [🔄] Rate limiting
 
 
 ## Official Website
