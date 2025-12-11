@@ -61,12 +61,13 @@ impl HttpServer {
             };
 
             let headers_str = str::from_utf8(&total_data[..headers_end - 4])?.to_string();
-            let content_length = HttpRequest::parse_content_length(headers_str.clone());
+
             let ip = HttpRequest::parse_check_value_header(headers_str.clone(), "X-Real-IP")
                 .unwrap_or("".to_string());
             let req_txt = HttpRequest::parse_content_request_format(headers_str.clone());
             status_text = format!("{}: {}", ip, &req_txt);
 
+            let content_length = HttpRequest::parse_content_length(headers_str.clone());
             if let Some(body_length) = content_length {
                 let body_data_received = total_data.len() - headers_end;
                 let remaining_body = body_length - body_data_received;
@@ -81,7 +82,6 @@ impl HttpServer {
                         }
                         bytes_read += n;
                     }
-
                     total_data.extend_from_slice(&body_buf);
                 }
             }
