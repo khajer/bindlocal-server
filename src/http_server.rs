@@ -17,6 +17,9 @@ pub struct HttpServer {
     shared_state: SharedState,
 }
 
+const TWO_DELIMETER_BYTES: &[u8] = b"\r\n\r\n";
+const CRLF: &[u8] = b"\r\n";
+
 impl HttpServer {
     pub async fn new(
         addr: &str,
@@ -52,7 +55,7 @@ impl HttpServer {
 
             let mut total_data = get_rawdata_delimiter(&mut stream).await.unwrap();
 
-            let header = total_data.windows(4).position(|w| w == b"\r\n\r\n");
+            let header = total_data.windows(4).position(|w| w == TWO_DELIMETER_BYTES);
             let headers_end = match header {
                 Some(value) => value + 4,
                 None => {
@@ -140,7 +143,7 @@ async fn wait_for_tcp_response(
     match rx_http.recv().await {
         Some(value) => {
             if !value.is_empty() {
-                let header = value.windows(2).position(|w| w == b"\r\n").unwrap();
+                let header = value.windows(2).position(|w| w == CRLF).unwrap();
                 let header_text = String::from_utf8_lossy(&value[0..header]);
                 status_resp = parse_response_header(header_text.to_string());
 
@@ -202,7 +205,7 @@ async fn get_rawdata_delimiter(stream: &mut TcpStream) -> Option<Vec<u8>> {
         }
         total_data.extend_from_slice(&buf[..n]);
 
-        if total_data.windows(4).any(|w| w == b"\r\n\r\n") {
+        if total_data.windows(4).any(|w| w == TWO_DELIMETER_BYTES) {
             break;
         }
     }

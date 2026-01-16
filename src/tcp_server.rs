@@ -15,6 +15,8 @@ pub struct TcpServer {
 }
 
 const MINIMUM_CLIENT_VERSION: &str = "0.0.2";
+const TWO_DELIMETER_BYTES: &[u8] = b"\r\n\r\n";
+const ZERO_DELIMETER_BYTES: &[u8] = b"0\r\n\r\n";
 
 impl TcpServer {
     pub async fn new(
@@ -137,7 +139,7 @@ async fn process_ticket(
             eprintln!("Connection closed before headers");
         }
         buffer.extend_from_slice(&tmp[..n]);
-        if let Some(pos) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
+        if let Some(pos) = buffer.windows(4).position(|w| w == TWO_DELIMETER_BYTES) {
             header_end = pos + 4;
             break;
         }
@@ -166,7 +168,7 @@ async fn process_ticket(
         == Some("chunked".into())
     {
         loop {
-            if buffer[header_end..].windows(5).any(|w| w == b"0\r\n\r\n") {
+            if buffer[header_end..].windows(5).any(|w| w == ZERO_DELIMETER_BYTES) {
                 break;
             }
             // Read more data
@@ -179,7 +181,7 @@ async fn process_ticket(
 
         if let Some(terminator_pos) = buffer[header_end..]
             .windows(5)
-            .position(|w| w == b"0\r\n\r\n")
+            .position(|w| w == ZERO_DELIMETER_BYTES)
         {
             let end_pos = header_end + terminator_pos + 5; // Include the terminator
             buffer.truncate(end_pos);
@@ -211,7 +213,6 @@ fn parse_version(version_str: &str) -> Option<(u32, u32, u32)> {
     }
 }
 
-/// Checks if the `first_access` version is greater than or equal to the `current_version`.
 fn check_available_version(first_access: &str, current_version: &str) -> bool {
     let first_parsed = match parse_version(first_access) {
         Some(v) => v,
