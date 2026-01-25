@@ -43,7 +43,7 @@ impl HttpServer {
             let shared_state = self.shared_state.clone();
             tokio::spawn(async move {
                 if let Err(e) = Self::handle_connection(socket, shared_state).await {
-                    eprintln!("Error handling HTTP connection: {}", e);
+                    eprintln!("Error handling HTTP connection: {e}");
                 }
             });
         }
