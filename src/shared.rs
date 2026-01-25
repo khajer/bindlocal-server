@@ -40,12 +40,12 @@ impl SharedState {
             match tx_http.send(message) {
                 Ok(_) => true,
                 Err(e) => {
-                    eprintln!("Failed to send message to HTTP client: {}", e);
+                    eprintln!("Failed to send message to HTTP client: {e}");
                     false
                 }
             }
         } else {
-            tracing::error!("cannot connect http client id {}", client_id);
+            tracing::error!("cannot connect http client id {client_id}");
             false
         }
     }

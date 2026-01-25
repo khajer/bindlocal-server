@@ -40,8 +40,8 @@ impl ServerConfig {
         };
 
         Ok(ServerConfig {
-            http_addr: format!("0.0.0.0:{}", http_port),
-            tcp_addr: format!("0.0.0.0:{}", tcp_port),
+            http_addr: format!("0.0.0.0:{http_port}"),
+            tcp_addr: format!("0.0.0.0:{tcp_port}"),
             http_port,
             tcp_port,
         })
