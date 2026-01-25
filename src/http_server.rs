@@ -20,6 +20,9 @@ pub struct HttpServer {
 const TWO_DELIMETER_BYTES: &[u8] = b"\r\n\r\n";
 const CRLF: &[u8] = b"\r\n";
 
+const X_REAL_IP: &str = "X-Real-IP";
+const CONNECTION: &str = "Connection";
+
 impl HttpServer {
     pub async fn new(
         addr: &str,
@@ -65,10 +68,10 @@ impl HttpServer {
 
             let headers_str = str::from_utf8(&total_data[..headers_end - 4])?.to_string();
 
-            let ip = HttpRequest::parse_check_value_header(headers_str.clone(), "X-Real-IP")
+            let ip = HttpRequest::parse_check_value_header(headers_str.clone(), X_REAL_IP)
                 .unwrap_or("".to_string());
             let req_txt = HttpRequest::parse_content_request_format(headers_str.clone());
-            status_text = format!("{}: {}", ip, &req_txt);
+            status_text = format!("{ip}: {req_txt}");
 
             let content_length = HttpRequest::parse_content_length(headers_str.clone());
             if let Some(body_length) = content_length {
@@ -124,7 +127,7 @@ impl HttpServer {
             wait_for_tcp_response(rx_http, &mut stream, status_text).await;
 
             if let Some(conn_type) =
-                HttpRequest::parse_check_value_header(headers_str, "Connection")
+                HttpRequest::parse_check_value_header(headers_str, CONNECTION)
             {
                 if conn_type == "close" {
                     break;
