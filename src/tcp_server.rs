@@ -33,14 +33,14 @@ impl TcpServer {
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             let (socket, addr) = self.listener.accept().await?;
-            tracing::info!("New TCP connection from: {}", addr);
+            tracing::info!("New TCP connection from: {addr}");
 
             let shared_state = self.shared_state.clone();
 
             // Spawn a new task for each TCP connection
             tokio::spawn(async move {
                 if let Err(e) = Self::handle_tcp_connection(socket, shared_state).await {
-                    eprintln!("Error handling TCP connection: {}", e);
+                    eprintln!("Error handling TCP connection: {e}");
                 }
             });
         }
@@ -70,7 +70,7 @@ impl TcpServer {
             client_id = sub_domain_name.to_string();
             let mut cnt = 1;
             while shared_state.check_duplicate_subdomain(client_id.clone()) {
-                client_id = format!("{}-{}", client_id, cnt);
+                client_id = format!("{client_id}-{cnt}");
                 cnt += 1;
             }
         } else {
@@ -79,14 +79,14 @@ impl TcpServer {
                 client_id = generate_name();
             }
         }
-        tracing::info!("client id [{}]", client_id);
+        tracing::info!("client id [{client_id}]");
         let (tx_tcp, mut rx_tcp) = mpsc::unbounded_channel::<TicketRequestHttp>();
         shared_state
             .register_tcp_client(client_id.to_string(), tx_tcp)
             .await;
 
         // Send welcome message
-        let welcome = format!("{}", client_id);
+        let welcome = format!("{client_id}");
         stream.write_all(welcome.as_bytes()).await?;
 
         loop {
@@ -97,7 +97,7 @@ impl TcpServer {
                             process_ticket(ticket, &mut stream, &client_id, &mut shared_state).await;
                         },
                         None => {
-                            tracing::info!("TCP client application close: [{}] ", client_id);
+                            tracing::info!("TCP client application close: [{client_id}] ");
                             shared_state
                                 .unregister_tcp_client(client_id.as_str()).await;
                             break;
@@ -119,14 +119,13 @@ async fn process_ticket(
     let message = ticket.data;
     if let Err(e) = stream.write_all(&message).await {
         eprintln!(
-            "Error sending direct message to TCP client {}: {}",
-            client_id, e
+            "Error sending direct message to TCP client {client_id}: {e}"
         );
         shared_state.send_to_http_client(&ticket.name, vec![]).await;
     }
 
     if let Err(e) = stream.flush().await {
-        eprintln!("Error flushing TCP stream: {}", e);
+        eprintln!("Error flushing TCP stream: {e}");
         shared_state.send_to_http_client(&ticket.name, vec![]).await;
     }
 
