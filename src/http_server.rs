@@ -17,6 +17,12 @@ pub struct HttpServer {
     shared_state: SharedState,
 }
 
+const TWO_DELIMETER_BYTES: &[u8] = b"\r\n\r\n";
+const CRLF: &[u8] = b"\r\n";
+
+const X_REAL_IP: &str = "X-Real-IP";
+const CONNECTION: &str = "Connection";
+
 impl HttpServer {
     pub async fn new(
         addr: &str,
@@ -37,7 +43,7 @@ impl HttpServer {
             let shared_state = self.shared_state.clone();
             tokio::spawn(async move {
                 if let Err(e) = Self::handle_connection(socket, shared_state).await {
-                    eprintln!("Error handling HTTP connection: {}", e);
+                    eprintln!("Error handling HTTP connection: {e}");
                 }
             });
         }
@@ -49,21 +55,10 @@ impl HttpServer {
     ) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             let status_text;
-            let mut buf = vec![0u8; 1024]; // Initial capacity
-            let mut total_data = Vec::new();
-            loop {
-                let n = stream.read(&mut buf).await?;
-                if n == 0 {
-                    break; // EOF
-                }
-                total_data.extend_from_slice(&buf[..n]);
 
-                if total_data.windows(4).any(|w| w == b"\r\n\r\n") {
-                    break;
-                }
-            }
+            let mut total_data = get_rawdata_delimiter(&mut stream).await.unwrap();
 
-            let header = total_data.windows(4).position(|w| w == b"\r\n\r\n");
+            let header = total_data.windows(4).position(|w| w == TWO_DELIMETER_BYTES);
             let headers_end = match header {
                 Some(value) => value + 4,
                 None => {
@@ -72,12 +67,13 @@ impl HttpServer {
             };
 
             let headers_str = str::from_utf8(&total_data[..headers_end - 4])?.to_string();
-            let content_length = HttpRequest::parse_content_length(headers_str.clone());
-            let ip = HttpRequest::parse_check_value_header(headers_str.clone(), "X-Real-IP")
+
+            let ip = HttpRequest::parse_check_value_header(headers_str.clone(), X_REAL_IP)
                 .unwrap_or("".to_string());
             let req_txt = HttpRequest::parse_content_request_format(headers_str.clone());
-            status_text = format!("{}: {}", ip, &req_txt);
+            status_text = format!("{ip}: {req_txt}");
 
+            let content_length = HttpRequest::parse_content_length(headers_str.clone());
             if let Some(body_length) = content_length {
                 let body_data_received = total_data.len() - headers_end;
                 let remaining_body = body_length - body_data_received;
@@ -92,7 +88,6 @@ impl HttpServer {
                         }
                         bytes_read += n;
                     }
-
                     total_data.extend_from_slice(&body_buf);
                 }
             }
@@ -132,7 +127,7 @@ impl HttpServer {
             wait_for_tcp_response(rx_http, &mut stream, status_text).await;
 
             if let Some(conn_type) =
-                HttpRequest::parse_check_value_header(headers_str, "Connection")
+                HttpRequest::parse_check_value_header(headers_str, CONNECTION)
             {
                 if conn_type == "close" {
                     break;
@@ -151,7 +146,7 @@ async fn wait_for_tcp_response(
     match rx_http.recv().await {
         Some(value) => {
             if !value.is_empty() {
-                let header = value.windows(2).position(|w| w == b"\r\n").unwrap();
+                let header = value.windows(2).position(|w| w == CRLF).unwrap();
                 let header_text = String::from_utf8_lossy(&value[0..header]);
                 status_resp = parse_response_header(header_text.to_string());
 
@@ -201,6 +196,23 @@ fn check_client_app_error(status_resp: String) -> Option<Vec<u8>> {
     } else {
         None
     }
+}
+
+async fn get_rawdata_delimiter(stream: &mut TcpStream) -> Option<Vec<u8>> {
+    let mut buf = vec![0u8; 4096]; // Initial capacity
+    let mut total_data: Vec<u8> = Vec::new();
+    loop {
+        let n = stream.read(&mut buf).await.unwrap();
+        if n == 0 {
+            break; // EOF
+        }
+        total_data.extend_from_slice(&buf[..n]);
+
+        if total_data.windows(4).any(|w| w == TWO_DELIMETER_BYTES) {
+            break;
+        }
+    }
+    Some(total_data)
 }
 
 #[cfg(test)]

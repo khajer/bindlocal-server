@@ -15,6 +15,8 @@ pub struct TcpServer {
 }
 
 const MINIMUM_CLIENT_VERSION: &str = "0.0.2";
+const TWO_DELIMETER_BYTES: &[u8] = b"\r\n\r\n";
+const ZERO_DELIMETER_BYTES: &[u8] = b"0\r\n\r\n";
 
 impl TcpServer {
     pub async fn new(
@@ -31,14 +33,14 @@ impl TcpServer {
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             let (socket, addr) = self.listener.accept().await?;
-            tracing::info!("New TCP connection from: {}", addr);
+            tracing::info!("New TCP connection from: {addr}");
 
             let shared_state = self.shared_state.clone();
 
             // Spawn a new task for each TCP connection
             tokio::spawn(async move {
                 if let Err(e) = Self::handle_tcp_connection(socket, shared_state).await {
-                    eprintln!("Error handling TCP connection: {}", e);
+                    eprintln!("Error handling TCP connection: {e}");
                 }
             });
         }
@@ -49,7 +51,7 @@ impl TcpServer {
         mut shared_state: SharedState,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // check version available
-        let mut first_access = [0u8; 1024];
+        let mut first_access = [0u8; 4096];
         let n = stream.read(&mut first_access).await?;
         if n == 0 {
             return Ok(());
@@ -68,7 +70,7 @@ impl TcpServer {
             client_id = sub_domain_name.to_string();
             let mut cnt = 1;
             while shared_state.check_duplicate_subdomain(client_id.clone()) {
-                client_id = format!("{}-{}", client_id, cnt);
+                client_id = format!("{client_id}-{cnt}");
                 cnt += 1;
             }
         } else {
@@ -77,14 +79,14 @@ impl TcpServer {
                 client_id = generate_name();
             }
         }
-        tracing::info!("client id [{}]", client_id);
+        tracing::info!("client id [{client_id}]");
         let (tx_tcp, mut rx_tcp) = mpsc::unbounded_channel::<TicketRequestHttp>();
         shared_state
             .register_tcp_client(client_id.to_string(), tx_tcp)
             .await;
 
         // Send welcome message
-        let welcome = format!("{}", client_id);
+        let welcome = format!("{client_id}");
         stream.write_all(welcome.as_bytes()).await?;
 
         loop {
@@ -92,83 +94,10 @@ impl TcpServer {
                 msg = rx_tcp.recv() => {
                     match msg {
                         Some(ticket) => {
-                            let message = ticket.data;
-                            if let Err(e) = stream.write_all(&message).await {
-                                eprintln!("Error sending direct message to TCP client {}: {}", client_id, e);
-                                shared_state.send_to_http_client(client_id.as_str(), vec![]).await;
-                                break;
-                            }
-                            if let Err(e) = stream.flush().await {
-                                eprintln!("Error flushing TCP stream: {}", e);
-                                shared_state.send_to_http_client(client_id.as_str(), vec![]).await;
-                                break;
-                            }
-
-                            let mut buffer = Vec::new();
-                            let mut tmp = [0u8; 1024];
-                            let header_end;
-                            loop {
-                                let n = stream.read(&mut tmp).await?;
-                                if n == 0 {
-                                    return Err("Connection closed before headers".into());
-                                }
-                                buffer.extend_from_slice(&tmp[..n]);
-                                if let Some(pos) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
-                                    header_end = pos + 4;
-                                    break;
-                                }
-                            }
-                            let header_text = String::from_utf8_lossy(&buffer[..header_end]);
-
-                            let mut headers = HashMap::new();
-                            for line in header_text.lines().skip(1) {
-                                if let Some((k, v)) = line.split_once(": ") {
-                                    headers.insert(k.to_string(), v.to_string());
-                                }
-                            }
-
-                            if let Some(len) = headers.get("Content-Length") {
-                                let len = len.parse::<usize>()?;
-                                while buffer.len() < header_end + len {
-                                    let n = stream.read(&mut tmp).await?;
-                                    if n == 0 {
-                                        break;
-                                    }
-                                    buffer.extend_from_slice(&tmp[..n]);
-                                }
-                            } else if headers
-                                .get("Transfer-Encoding")
-                                .map(|v| v.to_ascii_lowercase())
-                                == Some("chunked".into())
-                            {
-                                loop {
-                                    if buffer[header_end..].windows(5).any(|w| w == b"0\r\n\r\n") {
-                                        break;
-                                    }
-                                    // Read more data
-                                    let n = stream.read(&mut tmp).await?;
-                                    if n == 0 {
-                                        return Err("Connection closed before chunked terminator".into());
-                                    }
-                                    buffer.extend_from_slice(&tmp[..n]);
-                                }
-
-                                if let Some(terminator_pos) = buffer[header_end..]
-                                    .windows(5)
-                                    .position(|w| w == b"0\r\n\r\n")
-                                {
-                                    let end_pos = header_end + terminator_pos + 5; // Include the terminator
-                                    buffer.truncate(end_pos);
-                                }
-                            } else {
-                                // case error
-                                // println!("Error: ERROR CASE");
-                                // case return only header for example: 304, 201
-                            }
-                            shared_state.send_to_http_client(ticket.name.as_str(), buffer).await;
+                            process_ticket(ticket, &mut stream, &client_id, &mut shared_state).await;
                         },
                         None => {
-                            tracing::info!("TCP client application close: [{}] ", client_id);
+                            tracing::info!("TCP client application close: [{client_id}] ");
                             shared_state
                                 .unregister_tcp_client(client_id.as_str()).await;
                             break;
@@ -179,6 +108,91 @@ impl TcpServer {
         }
         Ok(())
     }
+}
+
+async fn process_ticket(
+    ticket: TicketRequestHttp,
+    stream: &mut TcpStream,
+    client_id: &str,
+    shared_state: &mut SharedState,
+) {
+    let message = ticket.data;
+    if let Err(e) = stream.write_all(&message).await {
+        eprintln!(
+            "Error sending direct message to TCP client {client_id}: {e}"
+        );
+        shared_state.send_to_http_client(&ticket.name, vec![]).await;
+    }
+
+    if let Err(e) = stream.flush().await {
+        eprintln!("Error flushing TCP stream: {e}");
+        shared_state.send_to_http_client(&ticket.name, vec![]).await;
+    }
+
+    let mut buffer: Vec<u8> = Vec::new();
+    let mut tmp = [0u8; 4096];
+    let header_end;
+    loop {
+        let n = stream.read(&mut tmp).await.unwrap();
+        if n == 0 {
+            eprintln!("Connection closed before headers");
+        }
+        buffer.extend_from_slice(&tmp[..n]);
+        if let Some(pos) = buffer.windows(4).position(|w| w == TWO_DELIMETER_BYTES) {
+            header_end = pos + 4;
+            break;
+        }
+    }
+    let header_text = String::from_utf8_lossy(&buffer[..header_end]);
+
+    let mut headers = HashMap::new();
+    for line in header_text.lines().skip(1) {
+        if let Some((k, v)) = line.split_once(": ") {
+            headers.insert(k.to_string(), v.to_string());
+        }
+    }
+
+    if let Some(len) = headers.get("Content-Length") {
+        let len = len.parse::<usize>().unwrap();
+        while buffer.len() < header_end + len {
+            let n = stream.read(&mut tmp).await.unwrap();
+            if n == 0 {
+                break;
+            }
+            buffer.extend_from_slice(&tmp[..n]);
+        }
+    } else if headers
+        .get("Transfer-Encoding")
+        .map(|v| v.to_ascii_lowercase())
+        == Some("chunked".into())
+    {
+        loop {
+            if buffer[header_end..].windows(5).any(|w| w == ZERO_DELIMETER_BYTES) {
+                break;
+            }
+            // Read more data
+            let n = stream.read(&mut tmp).await.unwrap();
+            if n == 0 {
+                eprintln!("Connection closed before chunked terminator");
+            }
+            buffer.extend_from_slice(&tmp[..n]);
+        }
+
+        if let Some(terminator_pos) = buffer[header_end..]
+            .windows(5)
+            .position(|w| w == ZERO_DELIMETER_BYTES)
+        {
+            let end_pos = header_end + terminator_pos + 5; // Include the terminator
+            buffer.truncate(end_pos);
+        }
+    } else {
+        // case error
+        // println!("Error: ERROR CASE");
+        // case return only header for example: 304, 201
+    }
+    shared_state
+        .send_to_http_client(ticket.name.as_str(), buffer)
+        .await;
 }
 
 fn generate_name() -> String {
@@ -198,7 +212,6 @@ fn parse_version(version_str: &str) -> Option<(u32, u32, u32)> {
     }
 }
 
-/// Checks if the `first_access` version is greater than or equal to the `current_version`.
 fn check_available_version(first_access: &str, current_version: &str) -> bool {
     let first_parsed = match parse_version(first_access) {
         Some(v) => v,
