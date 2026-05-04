@@ -88,9 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     print_startup_info(&config);
 
     let shared_state = SharedState::new();
-
     let (http_server, tcp_server) = initialize_servers(&config, shared_state).await?;
-
     run_servers(http_server, tcp_server).await?;
 
     Ok(())
