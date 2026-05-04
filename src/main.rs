@@ -19,6 +19,8 @@ pub struct ServerConfig {
     pub tcp_addr: String,
 }
 
+const TXT_INVALID_PORT: &str = "Invalid port";
+
 impl ServerConfig {
     pub fn from_args() -> Result<Self, Box<dyn std::error::Error>> {
         let args: Vec<String> = env::args().collect();
@@ -26,7 +28,7 @@ impl ServerConfig {
         let http_port = if args.len() > 1 {
             args[1]
                 .parse::<u16>()
-                .map_err(|_| format!("Invalid HTTP port: {}", args[1]))?
+                .map_err(|_| format!("{TXT_INVALID_PORT}: {}", args[1]))?
         } else {
             8080
         };
@@ -34,7 +36,7 @@ impl ServerConfig {
         let tcp_port = if args.len() > 2 {
             args[2]
                 .parse::<u16>()
-                .map_err(|_| format!("Invalid TCP port: {}", args[2]))?
+                .map_err(|_| format!("{TXT_INVALID_PORT}: {}", args[2]))?
         } else {
             9090
         };
@@ -86,9 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     print_startup_info(&config);
 
     let shared_state = SharedState::new();
-
     let (http_server, tcp_server) = initialize_servers(&config, shared_state).await?;
-
     run_servers(http_server, tcp_server).await?;
 
     Ok(())

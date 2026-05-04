@@ -1,11 +1,13 @@
 pub struct HttpRequest {}
 
+const CONTENT_LENGTH_HEADER: &str = "content-length:";
+const HOST_HEADER: &str = "host:";
+
 impl HttpRequest {
     pub fn get_subdomain(request: &str) -> String {
         for line in request.lines() {
-            if line.to_lowercase().starts_with("host:") {
+            if line.to_lowercase().starts_with("{HOST_HEADER}") {
                 let host = line.splitn(2, ':').nth(1).unwrap_or("").trim();
-
                 if let Some((subdomain, _rest)) = host.split_once('.') {
                     return subdomain.to_string();
                 }
@@ -15,7 +17,7 @@ impl HttpRequest {
     }
     pub fn parse_content_length(headers: String) -> Option<usize> {
         for line in headers.lines() {
-            if line.to_lowercase().starts_with("content-length:") {
+            if line.to_lowercase().starts_with("{CONTENT_LENGTH_HEADER}") {
                 if let Some(value) = line.split(':').nth(1) {
                     if let Ok(length) = value.trim().parse::<usize>() {
                         return Some(length);
