@@ -126,8 +126,7 @@ impl HttpServer {
             // waiting for response from TCP client
             wait_for_tcp_response(rx_http, &mut stream, status_text).await;
 
-            if let Some(conn_type) =
-                HttpRequest::parse_check_value_header(headers_str, CONNECTION)
+            if let Some(conn_type) = HttpRequest::parse_check_value_header(headers_str, CONNECTION)
             {
                 if conn_type == "close" {
                     break;
@@ -223,7 +222,6 @@ mod tests {
     fn test_generate_trx_id() {
         let client_id = "300".to_string();
         let id = generate_trx_id(client_id);
-        println!("{id}");
         assert_eq!(id.len(), 11); //client_tx-random(4)
     }
     #[test]
