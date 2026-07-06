@@ -10,6 +10,7 @@ use std::env;
 use tcp_server::TcpServer;
 use tracing::info;
 use tracing_subscriber::fmt;
+use tracing_subscriber::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
@@ -50,11 +51,17 @@ impl ServerConfig {
     }
 }
 
-fn setup_logging() {
-    fmt()
-        .with_target(false)
-        .with_max_level(tracing::Level::INFO)
+fn setup_logging() -> tracing_appender::non_blocking::WorkerGuard {
+    let file_appender = tracing_appender::rolling::daily("logs", "bindlocal-server.log");
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+
+    tracing_subscriber::registry()
+        .with(fmt::layer().with_target(false))
+        .with(fmt::layer().with_target(false).with_ansi(false).with_writer(non_blocking))
+        .with(tracing_subscriber::filter::LevelFilter::INFO)
         .init();
+
+    guard
 }
 
 fn print_startup_info(config: &ServerConfig) {
@@ -84,7 +91,7 @@ async fn run_servers(
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = ServerConfig::from_args()?;
-    setup_logging();
+    let _log_guard = setup_logging();
     print_startup_info(&config);
 
     let shared_state = SharedState::new();
